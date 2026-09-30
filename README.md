@@ -241,5 +241,25 @@ Le texte est inséré avec `textContent` (fonction `el`), jamais avec `innerHTML
 
 ---
 ---
+## 10. Dockerisation initiale
 
+Le portfolio est servi par **Nginx** dans un conteneur grâce au fichier [`portfolio/Dockerfile`](portfolio/Dockerfile) :
+
+```dockerfile
+# Image Nginx qui s'exécute sans droits root (écoute sur le port 8080)
+FROM nginxinc/nginx-unprivileged:alpine
+
+# Copie des fichiers statiques du portfolio dans le dossier servi par Nginx
+COPY index.html style.css script.js /usr/share/nginx/html/
+
+# Port d'écoute du conteneur
+EXPOSE 8080
+```
+
+**Explication :**
+- `FROM nginxinc/nginx-unprivileged:alpine` : image officielle de Nginx, légère (Alpine) et exécutée sans droits root, ce qui limite les risques.
+- `COPY ...` : le portfolio est un site statique, il suffit de copier ses trois fichiers dans le dossier que Nginx sert par défaut.
+- `EXPOSE 8080` : cette image écoute sur le port 8080 (sans droits root, le port 80 n'est pas utilisable).
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
