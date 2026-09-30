@@ -15,7 +15,7 @@ sudo systemctl status ssh
 ip a
 ```
 
-![Service SSH actif et adresse IP](screenshots/ssh-service.png)
+<img src="screenshots/ssh-service.png" alt="Service SSH actif et adresse IP" width="600">
 
 Génération d'une clé Ed25519 sur la machine physique et copie vers la VM :
 
@@ -47,7 +47,7 @@ sudo ufw enable
 sudo ufw status
 ```
 
-![Configuration SSH et pare-feu](screenshots/ssh-config.png)
+<img src="screenshots/ssh-config.png" alt="Configuration SSH et pare-feu" width="600">
 
 ---
 
@@ -60,7 +60,7 @@ hostname && lsb_release -a
 
 Connexion réussie par clé, sans mot de passe.
 
-![Connexion SSH](screenshots/ssh-connexion.png)
+<img src="screenshots/ssh-connexion.png" alt="Connexion SSH" width="600">
 
 ---
 
@@ -78,8 +78,8 @@ sudo systemctl status docker
 
 > Docker est installé depuis les dépôts Ubuntu (paquet `docker.io`, version 29.1.3).
 
-![Version de Docker et hello-world](screenshots/docker-hello.png)
-![Service Docker actif](screenshots/docker-status.png)
+<img src="screenshots/docker-hello.png" alt="Version de Docker et hello-world" width="600">
+<img src="screenshots/docker-status.png" alt="Service Docker actif" width="600">
 
 ---
 
@@ -102,9 +102,9 @@ sudo cat /var/lib/jenkins/secrets/initialAdminPassword
 
 Vérification depuis la machine physique : `http://192.168.237.130:8080`, avec installation des plugins suggérés et création de l'utilisateur admin.
 
-![Installation des plugins](screenshots/jenkins-install.png)
-![Service Jenkins](screenshots/jenkins-status.png)
-![Tableau de bord Jenkins](screenshots/jenkins.png)
+<img src="screenshots/jenkins-install.png" alt="Installation des plugins" width="600">
+<img src="screenshots/jenkins-status.png" alt="Service Jenkins" width="600">
+<img src="screenshots/jenkins.png" alt="Tableau de bord Jenkins" width="600">
 
 ---
 
@@ -119,7 +119,7 @@ git add .
 git commit -m "Ajout du mini CV one page"
 ```
 
-![CV](screenshots/cv.png)
+<img src="screenshots/cv.png" alt="CV" width="600">
 
 ---
 
@@ -131,7 +131,7 @@ Affichage de la clé publique, ajoutée sur GitHub (*Settings → SSH and GPG ke
 type $env:USERPROFILE\.ssh\id_ed25519.pub
 ```
 
-![Clé SSH sur GitHub](screenshots/github-ssh-key.png)
+<img src="screenshots/github-ssh-key.png" alt="Clé SSH sur GitHub" width="600">
 
 Test de l'authentification :
 
@@ -139,7 +139,7 @@ Test de l'authentification :
 ssh -T git@github.com
 ```
 
-![Test SSH GitHub](screenshots/github-ssh-test.png)
+<img src="screenshots/github-ssh-test.png" alt="Test SSH GitHub" width="600">
 
 Configuration du dépôt local pour utiliser SSH et push :
 
@@ -149,7 +149,7 @@ git remote -v
 git push -u origin main
 ```
 
-![Push GitHub](screenshots/git-push.png)
+<img src="screenshots/git-push.png" alt="Push GitHub" width="600">
 
 ---
 
@@ -159,7 +159,7 @@ Le mini CV devient une petite application web dans le dossier [`portfolio/`](por
 
 **Sections :** About, Skills, Projects, Experience, Contact.
 
-![Portfolio DevSecOps](screenshots/portfolio.png)
+<img src="screenshots/portfolio.png" alt="Portfolio DevSecOps" width="600">
 
 ### Principales améliorations
 
