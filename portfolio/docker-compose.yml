@@ -1,0 +1,10 @@
+services:
+  portfolio:
+    build: .
+    image: cv-docker
+    container_name: portfolio
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
