@@ -197,6 +197,48 @@ Chaque carte indique le rôle de l'outil et un niveau (pratiqué, bases ou à d�
 
 <img src="screenshots/devsecops-skills.png" alt="Section DevSecOps Skills" width="600">
 
+## 9. Section « Projects » générée dynamiquement en JavaScript
+
+Les projets ne sont pas écrits en HTML : ils sont décrits dans un **tableau d'objets** (`PROJECTS` dans [`portfolio/script.js`](portfolio/script.js)), et la page est construite à partir de ce tableau. Pour ajouter un projet, il suffit d'ajouter un objet, sans toucher au HTML.
+
+```javascript
+const PROJECTS = [
+  { cat: 'DevSecOps', title: 'VM DevSecOps sécurisée',
+    text: 'Ubuntu Server 26.04, accès SSH par clé, pare-feu, Docker et Jenkins en service.',
+    tags: ['Linux', 'SSH', 'Docker', 'Jenkins'],
+    link: 'https://github.com/nourkidoudi/tp-devops' },
+  { cat: 'Web', title: 'Smart City Web Platform',
+    text: 'Plateforme pour les services urbains et l\'engagement citoyen.',
+    tags: ['React.js', 'Node.js', 'API REST'] },
+  // ...
+];
+
+function renderProjects(filter) {
+  const ul = document.getElementById('project-list');
+  ul.replaceChildren();
+  PROJECTS.filter(p => filter === 'Tous' || p.cat === filter).forEach(p => {
+    const li = el('li');
+    li.dataset.cat = p.cat;
+    li.appendChild(el('h3', '', p.title));
+    li.appendChild(el('p', 'cat', p.cat));
+    li.appendChild(el('p', '', p.text));
+    li.appendChild(tagList(p.tags));
+    ul.appendChild(li);
+  });
+}
+```
+
+Le code fait trois choses :
+- `PROJECTS.filter(...)` sélectionne les projets selon la catégorie choisie ;
+- `forEach` crée un bloc de page par objet (titre, catégorie, description, technologies, lien) ;
+- les boutons de filtre (Tous, DevSecOps, Web, Monitoring) sont eux aussi générés à partir du tableau et appellent `renderProjects`.
+
+Le texte est inséré avec `textContent` (fonction `el`), jamais avec `innerHTML`, ce qui évite l'injection de code.
+
+**Résultat :**
+
+<img src="screenshots/projects.png" alt="Section Projects générée dynamiquement" width="600">
+
 ---
 ---
 
