@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+  <meta name="description" content="Portfolio DevSecOps de Nour Kidoudi, étudiante en Master DevOps et Cloud Computing.">
+  <title>Nour Kidoudi – DevSecOps Portfolio</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <a class="brand" href="#top">Nour Kidoudi</a>
+    <nav aria-label="Navigation principale">
+      <a href="#about">About</a>
+      <a href="#skills">Skills</a>
+      <a href="#projects">Projects</a>
+      <a href="#experience">Experience</a>
+      <a href="#contact">Contact</a>
+    </nav>
+    <button id="theme" type="button">Mode sombre</button>
+  </header>
+
+  <main>
+    <section id="top" class="hero">
+      <h1>Du code à la production, en sécurité.</h1>
+      <p class="lead">Je suis Nour, étudiante en Master DevOps &amp; Cloud Computing. Voici où j'en suis sur chaque étape d'un pipeline DevSecOps.</p>
+      <ol id="pipeline" class="pipeline" aria-label="Pipeline DevSecOps"></ol>
+      <ul class="legend">
+        <li><span class="dot done"></span>Pratiqué</li>
+        <li><span class="dot part"></span>Bases</li>
+        <li><span class="dot wip"></span>En apprentissage</li>
+      </ul>
+    </section>
+
+    <section id="about">
+      <h2>About</h2>
+      <div class="two">
+        <div>
+          <p>Titulaire d'une Licence en Développement de Systèmes d'Information, je suis en première année de Master DevOps &amp; Cloud Computing à l'ISET Tozeur.</p>
+          <p>Je viens du développement full stack (React, Node.js) et je m'intéresse à ce qui vient après le code : conteneurs, intégration continue, supervision et sécurité des accès.</p>
+          <p>Je cherche à rejoindre une équipe DevOps pour automatiser des pipelines et déployer des applications jusqu'en production.</p>
+        </div>
+        <dl class="facts">
+          <dt>Formation</dt><dd>Master DevOps &amp; Cloud, ISET Tozeur</dd>
+          <dt>Localisation</dt><dd>Tozeur, Tunisie</dd>
+          <dt>Langues</dt><dd>Arabe, français, anglais, allemand (notions)</dd>
+          <dt>Méthode</dt><dd>Scrum</dd>
+        </dl>
+      </div>
+    </section>
+
+    <section id="skills">
+      <h2>Skills</h2>
+      <ol id="skill-list" class="skills"></ol>
+    </section>
+
+    <section id="projects">
+      <h2>Projects</h2>
+      <div id="filters" class="filters" role="group" aria-label="Filtrer les projets"></div>
+      <ul id="project-list" class="projects"></ul>
+    </section>
+
+    <section id="experience">
+      <h2>Experience</h2>
+      <ol id="exp-list" class="timeline"></ol>
+    </section>
+
+    <section id="contact">
+      <h2>Contact</h2>
+      <div class="two">
+        <ul class="plain">
+          <li><a href="mailto:nour.kidoudi@gmail.com">nour.kidoudi@gmail.com</a></li>
+          <li><a href="https://linkedin.com/in/nour-kidoudi-099273287" target="_blank" rel="noopener noreferrer">LinkedIn</a></li>
+          <li><a href="https://github.com/nourkidoudi" target="_blank" rel="noopener noreferrer">GitHub</a></li>
+          <li>Tozeur, Tunisie</li>
+        </ul>
+        <form id="contact-form" novalidate>
+          <label for="f-name">Nom</label>
+          <input id="f-name" name="name" type="text" autocomplete="name" required maxlength="80">
+          <label for="f-email">Email</label>
+          <input id="f-email" name="email" type="email" autocomplete="email" required maxlength="120">
+          <label for="f-msg">Message</label>
+          <textarea id="f-msg" name="message" rows="4" required maxlength="1000"></textarea>
+          <button type="submit">Envoyer par email</button>
+          <p id="form-status" role="status"></p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Page sans ressource externe, avec une politique CSP stricte : aucun script ni style tiers, et les données sont affichées avec <code>textContent</code>, jamais <code>innerHTML</code>.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

@@ -153,4 +153,38 @@ git push -u origin main
 
 ---
 
+## 7. Évolution : application « DevSecOps Portfolio »
+
+Le mini CV devient une petite application web dans le dossier [`portfolio/`](portfolio/) (`index.html`, `style.css`, `script.js`, `Dockerfile`). L'ancienne version reste dans [`cv/`](cv/).
+
+**Sections :** About, Skills, Projects, Experience, Contact.
+
+![Portfolio DevSecOps](screenshots/portfolio.png)
+
+### Principales améliorations
+
+- **Skills présentées comme un pipeline DevSecOps** (Plan, Code, Build, Integrate, Secure, Deploy, Monitor), chaque étape avec son niveau réel : pratiqué, bases ou en apprentissage.
+- **Application pilotée par les données** : projets, compétences et expériences sont des tableaux dans `script.js`, la page est générée dynamiquement.
+- **Projets filtrables** par catégorie (DevSecOps, Web, Monitoring).
+- **Navigation** avec menu fixe et section active mise en évidence.
+- **Formulaire de contact** avec validation, qui ouvre le client mail (aucun serveur ni service tiers).
+- **Mode sombre** qui suit la préférence du système et mémorise le choix, page responsive et accessible (focus visible, mouvement réduit respecté).
+- **Sécurité de la page** : politique CSP stricte (aucun script ni style externe), affichage des données avec `textContent` et non `innerHTML`, liens externes en `rel="noopener noreferrer"`.
+- **Conteneurisation** : `Dockerfile` basé sur nginx sans droits root.
+
+### Lancer le portfolio
+
+En local : ouvrir `portfolio/index.html` dans le navigateur.
+
+Dans un conteneur, sur la VM :
+
+```bash
+cd portfolio
+docker build -t portfolio .
+docker run -d --name portfolio -p 8081:8080 portfolio
+```
+Puis ouvrir `http://192.168.237.130:8081` depuis la machine physique (autoriser le port avec `sudo ufw allow 8081/tcp`).
+
+---
+
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
