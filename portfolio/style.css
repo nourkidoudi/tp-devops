@@ -110,3 +110,16 @@ footer { padding-top: 24px; padding-bottom: 40px; border-top: 1px solid var(--li
   .pipeline li:not(:last-child)::after { display: none; }
   .pipeline { gap: 6px; }
 }
+
+/* ---------- DevSecOps Skills ---------- */
+.intro { color: var(--muted); max-width: 62ch; margin: -8px 0 24px; }
+.group { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 28px 0 12px; }
+.tools { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.tool { display: grid; grid-template-columns: 48px 1fr; gap: 4px 14px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+.tool.next { border-style: dashed; }
+.tool .mono { grid-row: span 3; display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 10px; background: var(--brand); color: var(--bg); font: 700 1.05rem Georgia, serif; }
+.tool.next .mono { background: transparent; border: 2px dashed var(--brand); color: var(--brand); }
+.tool h4 { margin: 0; font-size: 1.05rem; }
+.tool .role { color: var(--muted); font-size: 0.85rem; }
+.tool .badge { font-size: 0.85rem; font-weight: 600; }
+.tool p { grid-column: 1 / -1; margin: 6px 0 0; color: var(--muted); font-size: 0.93rem; }

@@ -185,6 +185,19 @@ docker run -d --name portfolio -p 8081:8080 portfolio
 ```
 Puis ouvrir `http://192.168.237.130:8081` depuis la machine physique (autoriser le port avec `sudo ufw allow 8081/tcp`).
 
+
+## 8. Section « DevSecOps Skills »
+
+Une section **DevSecOps Skills** est ajoutée au portfolio ([`portfolio/`](portfolio/)). Elle affiche les 7 technologies demandées :
+
+- **Utilisés dans ce projet :** Git, Docker, Jenkins, avec pour chacun l'usage réel (dépôt GitHub en SSH, conteneurs sur la VM, Jenkins installé comme service).
+- **Prochaines étapes :** Kubernetes, Ansible, Terraform, Argo CD, affichés comme « à découvrir » avec leur rôle (orchestration, configuration as code, infrastructure as code, GitOps).
+
+Chaque carte indique le rôle de l'outil et un niveau (pratiqué, bases ou à découvrir), ce qui reste fidèle à ce qui a été réalisé.
+
+<img src="screenshots/devsecops-skills.png" alt="Section DevSecOps Skills" width="600">
+
+---
 ---
 
 **Dépôt :** https://github.com/nourkidoudi/tp-devops

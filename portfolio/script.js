@@ -13,6 +13,17 @@ const STAGES = [
   { name: 'Monitor', state: 'wip', tools: ['Prometheus', 'Grafana'], text: 'Supervision et alertes : sujet de mon projet de stage à l\'aéroport de Tozeur–Nefta.' }
 ];
 
+
+const TOOLS = [
+  { name: 'Git', mono: 'Git', role: 'Versioning', used: true, state: 'done', label: 'Pratiqué', text: 'Dépôt GitHub, commits et push via clé SSH : historique du CV et du portfolio.' },
+  { name: 'Docker', mono: 'Dk', role: 'Conteneurs', used: true, state: 'part', label: 'Bases', text: 'Installé sur la VM Ubuntu et validé avec hello-world ; Dockerfile nginx pour servir le portfolio.' },
+  { name: 'Jenkins', mono: 'Jk', role: 'CI/CD', used: true, state: 'part', label: 'Bases', text: 'Installé comme service sur la VM, tableau de bord accessible depuis la machine physique.' },
+  { name: 'Kubernetes', mono: 'K8', role: 'Orchestration', used: false, state: 'wip', label: 'À découvrir', text: 'Déployer et faire évoluer des conteneurs sur un cluster.' },
+  { name: 'Ansible', mono: 'An', role: 'Configuration as code', used: false, state: 'wip', label: 'À découvrir', text: 'Automatiser la configuration de la VM (SSH, pare-feu, Docker) au lieu de la faire à la main.' },
+  { name: 'Terraform', mono: 'Tf', role: 'Infrastructure as Code', used: false, state: 'wip', label: 'À découvrir', text: 'Décrire et créer l\'infrastructure cloud (AWS, Azure) par le code.' },
+  { name: 'Argo CD', mono: 'Ar', role: 'GitOps', used: false, state: 'wip', label: 'À découvrir', text: 'Déployer automatiquement sur Kubernetes à partir d\'un dépôt Git.' }
+];
+
 const PROJECTS = [
   { cat: 'DevSecOps', title: 'VM DevSecOps sécurisée', text: 'Ubuntu Server 26.04, accès SSH par clé, pare-feu, Docker et Jenkins en service, documenté dans un dépôt Git.', tags: ['Linux', 'SSH', 'Docker', 'Jenkins'], link: 'https://github.com/nourkidoudi/tp-devops' },
   { cat: 'Web', title: 'Smart City Web Platform', text: 'Plateforme pour les services urbains et l\'engagement citoyen : chatbot IA, scan de QR codes et gestion multi-rôles.', tags: ['React.js', 'Node.js', 'API REST'] },
@@ -68,6 +79,21 @@ function renderSkills() {
     body.appendChild(el('p', '', s.text));
     li.append(head, body);
     ol.appendChild(li);
+  });
+}
+
+function renderTools() {
+  TOOLS.forEach(t => {
+    const li = el('li', 'tool' + (t.used ? '' : ' next'));
+    li.appendChild(el('span', 'mono', t.mono));
+    li.appendChild(el('h4', '', t.name));
+    li.appendChild(el('span', 'role', t.role));
+    const badge = el('span', 'badge');
+    badge.appendChild(el('span', 'dot ' + t.state));
+    badge.appendChild(document.createTextNode(t.label));
+    li.appendChild(badge);
+    li.appendChild(el('p', '', t.text));
+    document.getElementById(t.used ? 'tools-used' : 'tools-next').appendChild(li);
   });
 }
 
@@ -171,6 +197,7 @@ form.addEventListener('submit', e => {
 
 renderPipeline();
 renderSkills();
+renderTools();
 renderFilters();
 renderProjects('Tous');
 renderExperience();
