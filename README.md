@@ -307,4 +307,46 @@ Accès depuis la machine physique sur `http://192.168.237.130:8081` :
 <img src="screenshots/acces-portfolio.png" alt="Portfolio accessible depuis la machine physique" width="600">
 
 ---
+## 13. Déploiement avec Docker Compose
+
+Le fichier [`portfolio/docker-compose.yml`](portfolio/docker-compose.yml) décrit le service :
+
+```yaml
+services:
+  portfolio:
+    build: .
+    image: cv-docker
+    container_name: portfolio
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+```
+
+- `build: .` construit l'image à partir du Dockerfile du dossier ;
+- `image: cv-docker` nomme l'image ;
+- `ports: "8081:8080"` expose le portfolio sur le port 8081 de la VM ;
+- `restart: unless-stopped` relance le conteneur après un redémarrage de la VM ;
+- `no-new-privileges` empêche le processus du conteneur d'obtenir de nouveaux droits.
+
+Commande utilisée sur la VM, dans le dossier `portfolio/` :
+
+```bash
+docker compose up -d
+```
+
+Résultat de `docker compose ps` :
+
+```
+COLLER ICI LA SORTIE RÉELLE DE docker compose ps
+```
+
+<img src="screenshots/compose-ps.png" alt="docker compose up et docker compose ps" width="600">
+
+Accès depuis la machine physique sur `http://192.168.237.130:8081` :
+
+<img src="screenshots/compose-acces.png" alt="Portfolio servi par Docker Compose" width="600">
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
