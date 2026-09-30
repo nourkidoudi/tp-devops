@@ -279,4 +279,32 @@ Vérification avec `docker images cv-docker` :
 <img src="screenshots/docker-build.png" alt="Construction de l'image cv-docker" width="600">
 
 ---
+## 12. Exécution du conteneur et accès depuis la machine physique
+
+Commande utilisée sur la VM :
+
+```bash
+docker run -d --name cv-docker -p 8081:8080 cv-docker
+```
+
+- `-d` : exécution en arrière-plan ;
+- `--name cv-docker` : nom du conteneur ;
+- `-p 8081:8080` : le port 8081 de la VM est redirigé vers le port 8080 du conteneur (Nginx) ;
+- `cv-docker` : image construite à l'étape 11.
+
+Le port est ouvert dans le pare-feu avec `sudo ufw allow 8081/tcp`.
+
+Résultat de `docker ps` :
+
+```
+COLLER ICI LA SORTIE RÉELLE DE docker ps
+```
+
+<img src="screenshots/docker-run.png" alt="docker run et docker ps" width="600">
+
+Accès depuis la machine physique sur `http://192.168.237.130:8081` :
+
+<img src="screenshots/acces-portfolio.png" alt="Portfolio accessible depuis la machine physique" width="600">
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
