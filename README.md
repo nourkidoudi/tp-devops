@@ -262,4 +262,21 @@ EXPOSE 8080
 - `EXPOSE 8080` : cette image écoute sur le port 8080 (sans droits root, le port 80 n'est pas utilisable).
 
 ---
+## 11. Construction de l'image Docker `cv-docker`
+
+Commande utilisée sur la VM, dans le dossier `portfolio/` qui contient le Dockerfile :
+
+```bash
+docker build -t cv-docker .
+```
+
+- `docker build` construit une image à partir du Dockerfile ;
+- `-t cv-docker` donne le nom `cv-docker` à l'image ;
+- `.` indique que le Dockerfile se trouve dans le dossier courant.
+
+Vérification avec `docker images cv-docker` :
+
+<img src="screenshots/docker-build.png" alt="Construction de l'image cv-docker" width="600">
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
