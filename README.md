@@ -349,4 +349,21 @@ Accès depuis la machine physique sur `http://192.168.237.130:8081` :
 <img src="screenshots/compose-acces.png" alt="Portfolio servi par Docker Compose" width="600">
 
 ---
+## 14. Publication sur GitHub via SSH
+
+Le dépôt est relié à GitHub par SSH (clé `PC-lenovo`, voir l'étape 6). Commandes Git utilisées pour publier les modifications :
+
+```bash
+git remote -v                # vérifie que l'origine utilise SSH (git@github.com:...)
+ssh -T git@github.com        # teste l'authentification SSH
+git status                   # liste les fichiers modifiés
+git add -A                   # ajoute les modifications à l'index
+git commit -m "Message"      # enregistre les modifications
+git push                     # publie sur GitHub via SSH
+git log --oneline            # affiche l'historique des commits
+```
+
+Dépôt GitHub mis à jour : **https://github.com/nourkidoudi/tp-devops**
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
