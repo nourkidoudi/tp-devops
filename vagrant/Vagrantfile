@@ -1,0 +1,18 @@
+# Première VM Ubuntu Server créée automatiquement avec Vagrant
+Vagrant.configure("2") do |config|
+  # Image de base (box) : Ubuntu Server 24.04
+  config.vm.box = "cloud-image/ubuntu-24.04"
+  config.vm.hostname = "vagrant-ubuntu"
+
+  # Ressources de la VM (la VM hôte doit en avoir assez)
+  config.vm.provider "virtualbox" do |vb|
+    vb.name   = "ubuntu-vagrant"
+    vb.memory = 1024
+    vb.cpus   = 1
+  end
+
+  # Petite automatisation : un fichier créé au premier démarrage
+  config.vm.provision "shell", inline: <<-SHELL
+    echo "VM créée automatiquement par Vagrant" > /home/vagrant/bienvenue.txt
+  SHELL
+end
