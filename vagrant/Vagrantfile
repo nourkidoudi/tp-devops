@@ -2,6 +2,8 @@
 Vagrant.configure("2") do |config|
   # Image de base (box) : Ubuntu Server 24.04
   config.vm.box = "cloud-image/ubuntu-24.04"
+  # La virtualisation imbriquée ralentit le démarrage : on augmente le délai d'attente
+  config.vm.boot_timeout = 600
   config.vm.hostname = "vagrant-ubuntu"
 
   # Ressources de la VM (la VM hôte doit en avoir assez)
