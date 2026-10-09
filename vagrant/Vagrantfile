@@ -1,22 +1,26 @@
-# Première VM Ubuntu Server créée automatiquement avec Vagrant
+# Étape 17 : VM Ubuntu Server entièrement configurée par le Vagrantfile
 Vagrant.configure("2") do |config|
-  # Image de base (box) : Ubuntu Server 24.04
   config.vm.box = "cloud-image/ubuntu-24.04"
   # La virtualisation imbriquée ralentit le démarrage : on augmente le délai d'attente
   config.vm.boot_timeout = 1200
-  config.vm.hostname = "vagrant-ubuntu"
 
-  # Ressources de la VM (la VM hôte doit en avoir assez)
-  config.vm.provider "virtualbox" do |vb|
-    vb.name   = "ubuntu-vagrant"
-    vb.memory = 1024
-    vb.cpus   = 1
-    # Désactive la console série, qui ralentit fortement le démarrage des images cloud Ubuntu
-    vb.customize ["modifyvm", :id, "--uartmode1", "disconnected"]
+  # Nom de la VM dans Vagrant (vagrant status) et nom d'hôte
+  config.vm.define "ubuntu-devops" do |node|
+    node.vm.hostname = "ubuntu-devops"
+
+    # Adresse IP privée (réseau host-only)
+    node.vm.network "private_network", ip: "192.168.56.10"
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name   = "ubuntu-devops"   # nom de la VM dans VirtualBox
+      vb.memory = 1536              # mémoire en Mo
+      vb.cpus   = 2                 # nombre de CPU
+      # Désactive la console série, qui ralentit fortement le démarrage des images cloud Ubuntu
+      vb.customize ["modifyvm", :id, "--uartmode1", "disconnected"]
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      echo "VM créée automatiquement par Vagrant" > /home/vagrant/bienvenue.txt
+    SHELL
   end
-
-  # Petite automatisation : un fichier créé au premier démarrage
-  config.vm.provision "shell", inline: <<-SHELL
-    echo "VM créée automatiquement par Vagrant" > /home/vagrant/bienvenue.txt
-  SHELL
 end
