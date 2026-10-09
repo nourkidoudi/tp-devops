@@ -15,6 +15,8 @@ Vagrant.configure("2") do |config|
       vb.name   = "ubuntu-devops"   # nom de la VM dans VirtualBox
       vb.memory = 1536              # mémoire en Mo
       vb.cpus   = 2                 # nombre de CPU
+      # IO-APIC nécessaire pour que le système invité utilise plusieurs CPU
+      vb.customize ["modifyvm", :id, "--ioapic", "on"]
       # Désactive la console série, qui ralentit fortement le démarrage des images cloud Ubuntu
       vb.customize ["modifyvm", :id, "--uartmode1", "disconnected"]
     end
