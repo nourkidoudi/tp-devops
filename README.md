@@ -366,4 +366,60 @@ git log --oneline            # affiche l'historique des commits
 Dépôt GitHub mis à jour : **https://github.com/nourkidoudi/tp-devops**
 
 ---
+## 17. Configuration automatique de la VM
+
+Le `Vagrantfile` configure le nom de la VM, l'adresse IP privée, la mémoire et le nombre de CPU :
+
+```ruby
+Vagrant.configure("2") do |config|
+  config.vm.box = "cloud-image/ubuntu-24.04"
+  # La virtualisation imbriquée ralentit le démarrage : on augmente le délai d'attente
+  config.vm.boot_timeout = 1200
+
+  # Nom de la VM dans Vagrant (vagrant status) et nom d'hôte
+  config.vm.define "ubuntu-devops" do |node|
+    node.vm.hostname = "ubuntu-devops"
+
+    # Adresse IP privée (réseau host-only)
+    node.vm.network "private_network", ip: "192.168.56.10"
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name   = "ubuntu-devops"   # nom de la VM dans VirtualBox
+      vb.memory = 1536              # mémoire en Mo
+      vb.cpus   = 2                 # nombre de CPU
+      # IO-APIC nécessaire pour que le système invité utilise plusieurs CPU
+      vb.customize ["modifyvm", :id, "--ioapic", "on"]
+      # Désactive la console série, qui ralentit fortement le démarrage des images cloud Ubuntu
+      vb.customize ["modifyvm", :id, "--uartmode1", "disconnected"]
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      echo "VM créée automatiquement par Vagrant" > /home/vagrant/bienvenue.txt
+    SHELL
+  end
+end
+```
+
+| Paramètre | Directive | Valeur |
+|---|---|---|
+| Nom de la VM | `config.vm.define`, `vb.name` | `ubuntu-devops` |
+| Adresse IP privée | `private_network` | `192.168.56.10` |
+| Mémoire | `vb.memory` | 1536 Mo |
+| Nombre de CPU | `vb.cpus` | 2 |
+
+Remarque : sans l'IO-APIC, l'invité ne voyait qu'un seul CPU malgré `vb.cpus = 2`. L'ajout de `--ioapic on` a corrigé ce point.
+
+Résultat de `vagrant status` :
+
+```
+COLLER ICI LA SORTIE RÉELLE DE vagrant status
+```
+
+<img src="screenshots/vagrant-status.png" alt="vagrant status" width="600">
+
+Vérification dans la VM (nom d'hôte, interface `192.168.56.10`, mémoire, 2 CPU) :
+
+<img src="screenshots/vagrant-config.png" alt="Vérification de la configuration" width="600">
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
