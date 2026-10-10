@@ -574,4 +574,28 @@ Node.js 22 est installé sur la VM Jenkins (dépôt NodeSource). Le stage suivan
 <img src="screenshots/jenkins-install-log.png" alt="Journal du stage Install dependencies" width="600">
 
 ---
+## 24. Construction automatique de l'application Next.js
+
+Un stage `Build` est ajouté au `Jenkinsfile` : il exécute `npm run build` dans le dossier `portfolio-next` et produit la version de production du portfolio.
+
+```groovy
+        // Étape 24 : construction de l'application Next.js
+        stage('Build') {
+            steps {
+                dir('portfolio-next') {
+                    sh 'npm run build'
+                }
+            }
+        }
+```
+
+Le pipeline complet enchaîne trois stages : `Checkout`, `Install dependencies` et `Build`.
+
+<img src="screenshots/jenkins-build-stage.png" alt="Pipeline avec le stage Build" width="600">
+
+Résultat du build :
+
+<img src="screenshots/jenkins-build-result.png" alt="Résultat du build Next.js" width="600">
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
