@@ -5,6 +5,12 @@ pipeline {
     options {
         // Le checkout est fait explicitement dans le premier stage
         skipDefaultCheckout(true)
+        timeout(time: 30, unit: 'MINUTES')
+    }
+
+    environment {
+        CI = 'true'
+        NEXT_TELEMETRY_DISABLED = '1'
     }
 
     stages {
@@ -16,14 +22,25 @@ pipeline {
                 sh 'ls -la'
             }
         }
+
+        // Étape 23 : installation des dépendances du projet Next.js
+        stage('Install dependencies') {
+            steps {
+                dir('portfolio-next') {
+                    sh 'node --version'
+                    sh 'npm --version'
+                    sh 'npm ci --no-audit --no-fund'
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo 'Dépôt récupéré avec succès.'
+            echo 'Pipeline terminé avec succès.'
         }
         failure {
-            echo 'Le pipeline a échoué : consulter la console.'
+            echo 'Le pipeline a échoué : consulter la console du stage en erreur.'
         }
     }
 }
