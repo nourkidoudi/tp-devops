@@ -511,4 +511,43 @@ Un projet inconnu renvoie une page 404 grâce à `notFound()`.
 <img src="screenshots/next-projet.png" alt="Page d'un projet" width="600">
 
 ---
+## 22. Premier pipeline Jenkins : récupération du dépôt GitHub
+
+Un job Jenkins de type Pipeline (`portfolio-pipeline`) utilise l'option **Pipeline script from SCM** : Jenkins récupère le dépôt `https://github.com/nourkidoudi/tp-devops.git` (branche `main`), puis lit le fichier [`Jenkinsfile`](Jenkinsfile) situé à la racine.
+
+```groovy
+// Pipeline Jenkins du DevSecOps Portfolio
+pipeline {
+    agent any
+
+    options {
+        // Le checkout est fait explicitement dans le premier stage
+        skipDefaultCheckout(true)
+    }
+
+    stages {
+        // Étape 22 : récupération automatique du dépôt GitHub
+        stage('Checkout') {
+            steps {
+                checkout scm
+                sh 'git log -1 --oneline'
+                sh 'ls -la'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Dépôt récupéré avec succès.'
+        }
+        failure {
+            echo 'Le pipeline a échoué : consulter la console.'
+        }
+    }
+}
+```
+
+<img src="screenshots/jenkins-pipeline.png" alt="Pipeline Jenkins exécuté" width="600">
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
