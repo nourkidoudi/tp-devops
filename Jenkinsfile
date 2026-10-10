@@ -43,4 +43,14 @@ pipeline {
             echo 'Le pipeline a échoué : consulter la console du stage en erreur.'
         }
     }
+```groovy
+        // Étape 24 : construction de l'application Next.js
+        stage('Build') {
+            steps {
+                dir('portfolio-next') {
+                    sh 'npm run build'
+                }
+            }
+        }
+```
 }
