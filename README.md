@@ -550,4 +550,28 @@ pipeline {
 <img src="screenshots/jenkins-pipeline.png" alt="Pipeline Jenkins exécuté" width="600">
 
 ---
+
+## 23. Installation des dépendances du projet Next.js
+
+Node.js 22 est installé sur la VM Jenkins (dépôt NodeSource). Le stage suivant est ajouté au `Jenkinsfile` :
+
+```groovy
+        // Étape 23 : installation des dépendances du projet Next.js
+        stage('Install dependencies') {
+            steps {
+                dir('portfolio-next') {
+                    sh 'node --version'
+                    sh 'npm --version'
+                    sh 'npm ci --no-audit --no-fund'
+                }
+            }
+        }
+```
+
+`npm ci` installe exactement les versions du fichier `package-lock.json`, ce qui rend le build reproductible.
+
+<img src="screenshots/jenkins-install-stage.png" alt="Stage Install dependencies" width="600">
+<img src="screenshots/jenkins-install-log.png" alt="Journal du stage Install dependencies" width="600">
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
