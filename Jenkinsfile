@@ -33,17 +33,7 @@ pipeline {
                 }
             }
         }
-    }
 
-    post {
-        success {
-            echo 'Pipeline terminé avec succès.'
-        }
-        failure {
-            echo 'Le pipeline a échoué : consulter la console du stage en erreur.'
-        }
-    }
-```groovy
         // Étape 24 : construction de l'application Next.js
         stage('Build') {
             steps {
@@ -52,5 +42,14 @@ pipeline {
                 }
             }
         }
-```
+    }
+
+    post {
+        success {
+            echo 'Pipeline terminé avec succès : le portfolio Next.js est construit.'
+        }
+        failure {
+            echo 'Le pipeline a échoué : consulter la console du stage en erreur.'
+        }
+    }
 }
