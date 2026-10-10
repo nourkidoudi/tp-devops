@@ -422,4 +422,93 @@ Vérification dans la VM (nom d'hôte, interface `192.168.56.10`, mémoire, 2 CP
 <img src="screenshots/vagrant-config.png" alt="Vérification de la configuration" width="600">
 
 ---
+## 18. Migration du portfolio vers Next.js
+
+Commande de création du projet :
+
+```bash
+npx create-next-app@latest portfolio-next
+```
+
+Next.js 16 avec le routeur App Router et TypeScript. Les mêmes sections que la version HTML/CSS/JavaScript sont conservées : About, Skills, DevSecOps Skills, Projects, Experience et Contact. Lancement : `npm run dev`, puis `http://localhost:3000`.
+
+<img src="screenshots/next-home.png" alt="Portfolio Next.js" width="600">
+
+---
+
+## 19. Composants réutilisables
+
+```
+portfolio-next/
+├── app/
+│   ├── layout.tsx          # Header + Footer autour de chaque page
+│   ├── page.tsx            # page d'accueil : assemble les sections
+│   ├── globals.css
+│   └── projects/
+│       ├── page.tsx        # /projects
+│       └── [slug]/page.tsx # /projects/nom-du-projet
+├── components/
+│   ├── Header.tsx  ThemeToggle.tsx  Footer.tsx
+│   ├── Hero.tsx  About.tsx  Skills.tsx  Tools.tsx
+│   ├── Projects.tsx  ProjectList.tsx
+│   ├── Experience.tsx
+│   └── Contact.tsx  ContactForm.tsx
+└── data/
+    ├── types.ts  stages.ts  tools.ts
+    └── projects.ts  experience.ts
+```
+
+La page d'accueil assemble les composants :
+
+```tsx
+export default function Home() {
+  return (
+    <>
+      <Hero />
+      <About />
+      <Skills />
+      <Tools />
+      <Projects />
+      <Experience />
+      <Contact />
+    </>
+  );
+}
+```
+
+---
+
+## 20. Données séparées des composants
+
+Les projets, compétences et expériences sont dans le dossier `data/`, typés avec TypeScript. Exemple extrait de `data/projects.ts` :
+
+```ts
+export const projects: Project[] = [
+  {
+    slug: "smart-city-web-platform",
+    category: "Web",
+    title: "Smart City Web Platform",
+    status: "Projet de fin d'études",
+    summary: "Plateforme pour les services urbains et l'engagement citoyen.",
+    tags: ["React.js", "Node.js", "API REST"],
+    // ...
+  },
+];
+```
+
+Les composants lisent ces données avec `projects.map(...)` : pour ajouter un projet, il suffit d'ajouter un objet.
+
+---
+
+## 21. Pages dédiées aux projets
+
+- `/projects` affiche la liste de tous les projets, avec filtre par catégorie ;
+- `/projects/nom-du-projet` affiche le détail d'un projet (route dynamique `app/projects/[slug]/page.tsx`).
+
+Un projet inconnu renvoie une page 404 grâce à `notFound()`.
+
+<img src="screenshots/next-projects.png" alt="Page /projects" width="600">
+<img src="screenshots/next-projet.png" alt="Page d'un projet" width="600">
+
+---
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
