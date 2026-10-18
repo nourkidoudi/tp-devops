@@ -598,4 +598,105 @@ Résultat du build :
 <img src="screenshots/jenkins-build-result.png" alt="Résultat du build Next.js" width="600">
 
 ---
+## 25. Installation d'Ansible sur une VM d'administration
+
+Ansible est installé sur une VM dédiée à l'administration (`vm-admin`), distincte du serveur géré.
+
+```bash
+sudo apt update
+sudo apt install -y ansible
+ansible --version
+```
+
+<img src="screenshots/ansible-version.png" alt="Version d'Ansible" width="600">
+
+---
+## 26. Inventory et test de communication
+
+La VM d'administration se connecte au serveur Ubuntu par clé SSH (mot de passe désactivé). La clé publique de `vm-admin` a été ajoutée dans `~/.ssh/authorized_keys` du serveur.
+
+Fichier `inventory.ini` :
+
+```ini
+[serveurs]
+192.168.237.135 ansible_user=nour
+```
+
+Fichier `ansible.cfg` :
+
+```ini
+[defaults]
+inventory = ./inventory.ini
+host_key_checking = False
+```
+
+Test de communication :
+
+```bash
+ansible all -m ping
+```
+
+<img src="screenshots/ansible-ping.png" alt="Résultat du ping Ansible" width="600">
+---
+## 28. Installation automatique de Docker avec Ansible
+
+Une nouvelle VM (`vm-cible`, sans Docker) est ajoutée à l'inventory dans le groupe `nouvelle_vm` :
+
+```ini
+[serveurs]
+192.168.237.135 ansible_user=nour
+
+[nouvelle_vm]
+192.168.237.136 ansible_user=nour
+```
+
+Playbook `install-docker.yml` :
+
+```yaml
+---
+- name: Installer Docker sur une nouvelle VM
+  hosts: nouvelle_vm
+  become: true
+
+  tasks:
+    - name: Mettre à jour le cache apt
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Installer Docker
+      ansible.builtin.apt:
+        name: docker.io
+        state: present
+
+    - name: Démarrer et activer le service Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Ajouter l'utilisateur au groupe docker
+      ansible.builtin.user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Vérifier la version de Docker
+      ansible.builtin.command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Afficher la version
+      ansible.builtin.debug:
+        msg: "{{ docker_version.stdout }}"
+```
+
+Exécution et vérification :
+
+```bash
+ansible-playbook install-docker.yml
+ansible nouvelle_vm -a "docker --version"
+```
+
+<img src="screenshots/ansible-docker-version.png" alt="Installation de Docker avec Ansible et résultat de docker --version" width="600">
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
