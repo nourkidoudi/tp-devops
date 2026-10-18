@@ -888,4 +888,64 @@ API_URL=http://localhost:3001
 # Port d'écoute de l'API
 PORT=3001
 ```
+---
+## 38. Dockerfile du frontend Next.js
+
+Le frontend est construit et exécuté avec un Dockerfile en **trois étapes** (`portfolio-next/Dockerfile`).
+
+Dans `next.config.ts`, l'option `output: "standalone"` demande à Next.js de produire un dossier autonome, avec seulement les fichiers nécessaires à l'exécution :
+
+```ts
+const nextConfig: NextConfig = {
+  output: "standalone",
+  // ...
+};
+```
+
+Dockerfile :
+
+```dockerfile
+# Étape 1 : installation des dépendances
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Étape 2 : construction de l'application
+FROM node:22-alpine AS builder
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+# Étape 3 : image finale, légère, qui exécute l'application
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+# Utilisateur sans droits root
+RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+USER nextjs
+EXPOSE 3000
+
+# L'URL de l'API est fournie au démarrage avec la variable API_URL
+CMD ["node", "server.js"]
+```
+
+**Explication :**
+
+- Le **build en plusieurs étapes** sépare la construction de l'exécution : l'image finale ne contient ni les outils de build ni les dépendances de développement, elle est donc plus légère.
+- `npm ci` installe exactement les versions du `package-lock.json`, ce qui rend le build reproductible.
+- L'application tourne avec un **utilisateur sans droits root** (`nextjs`), par sécurité.
+- L'URL de l'API n'est pas écrite dans l'image : elle est passée au démarrage du conteneur avec la variable `API_URL` (étape 36).
+- Un fichier `.dockerignore` exclut `node_modules`, `.next`, `.git` et les fichiers `.env*` du contexte de build, pour qu'aucun secret ni fichier inutile ne soit copié dans l'image.
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
