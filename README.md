@@ -846,4 +846,46 @@ export async function getSkills(): Promise<{ stages: Stage[]; tools: Tool[] }> {
 ```
 
 <img src="screenshots/next-skills-api.png" alt="Compétences affichées à partir de l'API" width="600">
+
+---
+## 36. Configuration de l'URL de l'API avec la variable `API_URL`
+
+Le frontend Next.js lit l'URL de l'API dans la variable d'environnement `API_URL` (fichier `portfolio-next/lib/api.ts`) :
+
+```ts
+const API_URL = process.env.API_URL ?? "http://localhost:3001";
+```
+
+En local, la variable est définie dans un fichier `.env.local`, qui n'est pas versionné :
+
+```bash
+cp .env.example .env.local
+```
+
+**Pourquoi l'URL de l'API ne doit pas être codée en dur :**
+
+- **Elle change selon l'environnement.** En développement c'est `http://localhost:3001`, avec Docker Compose c'est `http://api:3001` (le nom du service sur le réseau Docker), et en production ce sera une autre adresse. Avec une URL écrite dans le code, il faudrait modifier le code pour chaque environnement.
+- **La même image peut être déployée partout.** L'application est construite une seule fois ; seule la variable d'environnement change selon l'endroit où elle s'exécute.
+- **Le code reste propre et sûr.** Les adresses et les paramètres propres à une machine ne sont pas committés dans Git. Le jour où une clé ou un mot de passe sera nécessaire, il suivra le même mécanisme, sans jamais apparaître dans le dépôt.
+
+---
+## 37. Fichier d'exemple `.env.example`
+
+Un fichier `.env.example` documente les variables attendues, **sans aucun secret réel**. Le vrai fichier `.env.local` est ignoré par Git, alors que `.env.example` est versionné.
+
+`portfolio-next/.env.example` :
+
+```env
+# URL de l'API Express, sans slash final
+# - en local : http://localhost:3001
+# - avec Docker Compose : http://api:3001
+API_URL=http://localhost:3001
+```
+
+`api/.env.example` :
+
+```env
+# Port d'écoute de l'API
+PORT=3001
+```
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
