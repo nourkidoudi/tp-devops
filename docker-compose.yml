@@ -1,0 +1,34 @@
+# Portfolio DevSecOps : frontend Next.js + API Express
+
+services:
+  api:
+    build: ./api
+    image: devsecops-api
+    container_name: devsecops-api
+    environment:
+      PORT: "3001"
+    ports:
+      - "3001:3001"
+    networks:
+      - portfolio-net
+    restart: unless-stopped
+
+  frontend:
+    build: ./portfolio-next
+    image: devsecops-portfolio
+    container_name: devsecops-portfolio
+    environment:
+      # Dans le réseau Compose, l'API est joignable par le nom de son service
+      API_URL: http://api:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - portfolio-net
+    restart: unless-stopped
+
+networks:
+  portfolio-net:
+    driver: bridge
