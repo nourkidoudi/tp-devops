@@ -1066,4 +1066,32 @@ COLLER ICI LA SORTIE DE docker compose ps
 ```
 
 <img src="screenshots/docker-compose-ps.png" alt="Résultat de docker compose ps" width="600">
+
+---
+## 42. Communication frontend ↔ API dans le réseau Docker Compose
+
+Le frontend et l'API tournent dans deux conteneurs reliés au réseau `portfolio-net`. Le frontend appelle l'API avec `API_URL=http://api:3001` : `api` est le nom du service, résolu par le DNS interne de Docker.
+
+**1. Appel de l'API depuis le conteneur du frontend** (par le nom du service, pas par `localhost`) :
+
+```bash
+docker compose exec frontend wget -qO- http://api:3001/api/health
+```
+
+**2. Les deux conteneurs sont bien sur le même réseau :**
+
+```bash
+docker network inspect tp-devops_portfolio-net --format '{{range .Containers}}{{.Name}} {{.IPv4Address}}{{"\n"}}{{end}}'
+```
+
+**3. Le portfolio affiche les données fournies par l'API.** Le portfolio est ouvert depuis la machine physique sur `http://IP_DE_LA_VM:3000` :
+
+<img src="screenshots/portfolio-donnees-api.png" alt="Portfolio affichant les données de l'API" width="600">
+
+**4. Preuve que les données viennent bien de l'API :** après `docker compose stop api`, les sections Projects, Skills et DevSecOps Skills affichent « Impossible de charger… » ; après `docker compose start api`, les données réapparaissent.
+
+<img src="screenshots/portfolio-api-arretee.png" alt="Portfolio quand l'API est arrêtée" width="600">
+
+Le navigateur ne contacte jamais l'API directement : c'est le serveur Next.js (dans le conteneur `frontend`) qui l'appelle à travers le réseau Compose. L'API n'a donc pas besoin d'être exposée au navigateur, et il n'y a pas de problème d'URL ni de CORS côté client.
+
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
