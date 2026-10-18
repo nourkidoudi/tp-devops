@@ -1,5 +1,8 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import StateDot from "./StateDot";
-import { tools } from "@/data/tools";
+import ApiError from "./ApiError";
+import { getSkills } from "@/lib/api";
 import type { Tool } from "@/data/types";
 
 function ToolCard({ tool }: { tool: Tool }) {
@@ -17,6 +20,32 @@ function ToolCard({ tool }: { tool: Tool }) {
   );
 }
 
+// Les outils viennent de l'API Express (GET /api/skills)
+async function ToolsData() {
+  await connection();
+  try {
+    const { tools } = await getSkills();
+    return (
+      <>
+        <h3 className="group">Utilisés dans ce projet</h3>
+        <ul className="tools">
+          {tools.filter((t) => t.used).map((t) => (
+            <ToolCard key={t.name} tool={t} />
+          ))}
+        </ul>
+        <h3 className="group">Prochaines étapes</h3>
+        <ul className="tools">
+          {tools.filter((t) => !t.used).map((t) => (
+            <ToolCard key={t.name} tool={t} />
+          ))}
+        </ul>
+      </>
+    );
+  } catch {
+    return <ApiError what="les outils" />;
+  }
+}
+
 export default function Tools() {
   return (
     <section id="devsecops">
@@ -24,18 +53,9 @@ export default function Tools() {
       <p className="intro">
         {"Les outils que j'ai réellement utilisés dans ce projet, puis ceux que je prépare pour la suite."}
       </p>
-      <h3 className="group">Utilisés dans ce projet</h3>
-      <ul className="tools">
-        {tools.filter((t) => t.used).map((t) => (
-          <ToolCard key={t.name} tool={t} />
-        ))}
-      </ul>
-      <h3 className="group">Prochaines étapes</h3>
-      <ul className="tools">
-        {tools.filter((t) => !t.used).map((t) => (
-          <ToolCard key={t.name} tool={t} />
-        ))}
-      </ul>
+      <Suspense fallback={<p>Chargement des outils…</p>}>
+        <ToolsData />
+      </Suspense>
     </section>
   );
 }

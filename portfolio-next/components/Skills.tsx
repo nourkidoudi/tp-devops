@@ -1,11 +1,16 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import StateDot from "./StateDot";
-import { stages } from "@/data/stages";
+import ApiError from "./ApiError";
+import { getSkills } from "@/lib/api";
 import { STATE_LABEL } from "@/data/types";
 
-export default function Skills() {
-  return (
-    <section id="skills">
-      <h2>Skills</h2>
+// Les étapes du pipeline viennent de l'API Express (GET /api/skills)
+async function SkillsData() {
+  await connection();
+  try {
+    const { stages } = await getSkills();
+    return (
       <ol className="skills">
         {stages.map((s) => (
           <li key={s.slug} id={`stage-${s.slug}`}>
@@ -25,6 +30,19 @@ export default function Skills() {
           </li>
         ))}
       </ol>
+    );
+  } catch {
+    return <ApiError what="les compétences" />;
+  }
+}
+
+export default function Skills() {
+  return (
+    <section id="skills">
+      <h2>Skills</h2>
+      <Suspense fallback={<p>Chargement des compétences…</p>}>
+        <SkillsData />
+      </Suspense>
     </section>
   );
 }

@@ -1,23 +1,27 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getProject, projects } from "@/data/projects";
+import { connection } from "next/server";
+import ApiError from "@/components/ApiError";
+import { getProject } from "@/lib/api";
 
 type Props = { params: Promise<{ slug: string }> };
 
-export function generateStaticParams() {
-  return projects.map((p) => ({ slug: p.slug }));
-}
+export const metadata: Metadata = {
+  title: "Projet – Nour Kidoudi",
+};
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+async function ProjectDetail({ params }: Props) {
+  await connection();
   const { slug } = await params;
-  const project = getProject(slug);
-  return { title: project ? `${project.title} – Projects` : "Projet introuvable" };
-}
 
-export default async function ProjectPage({ params }: Props) {
-  const { slug } = await params;
-  const project = getProject(slug);
+  let project;
+  try {
+    project = await getProject(slug);
+  } catch {
+    return <ApiError what="ce projet" />;
+  }
   if (!project) notFound();
 
   return (
@@ -59,5 +63,13 @@ export default async function ProjectPage({ params }: Props) {
         </p>
       )}
     </article>
+  );
+}
+
+export default function ProjectPage({ params }: Props) {
+  return (
+    <Suspense fallback={<p className="page">Chargement du projet…</p>}>
+      <ProjectDetail params={params} />
+    </Suspense>
   );
 }

@@ -805,4 +805,45 @@ curl http://localhost:3001/api/skills
 ```
 
 <img src="screenshots/api-skills.png" alt="Résultat de GET /api/skills" width="600">
+---
+## 34. Frontend Next.js : projets lus depuis l'API Express
+
+Le frontend ne lit plus la liste des projets dans un fichier local : il appelle l'API Express (`GET /api/projects` et `GET /api/projects/:slug`).
+
+Un fichier `portfolio-next/lib/api.ts` centralise les appels à l'API :
+
+```ts
+const API_URL = process.env.API_URL ?? "http://localhost:3001";
+
+async function get(path: string): Promise<Response> {
+  return fetch(`${API_URL}${path}`, { cache: "no-store" });
+}
+
+export async function getProjects(): Promise<Project[]> {
+  const res = await get("/api/projects");
+  if (!res.ok) throw new Error(`API /api/projects : erreur ${res.status}`);
+  return res.json();
+}
+```
+
+Les composants `Projects`, la page `/projects` et la page `/projects/[slug]` appellent ces fonctions. Les données sont lues à chaque requête (`cache: "no-store"`) et affichées dans un `<Suspense>` : la page se charge immédiatement et les projets arrivent dès que l'API répond. Si l'API est arrêtée, la page affiche un message d'erreur au lieu de planter. Comme rien n'est lu pendant le `build`, l'image Docker pourra être construite sans que l'API soit démarrée.
+
+Pour tester, l'API est lancée dans un terminal (`npm start` dans `api/`) et le frontend dans un autre (`npm run dev` dans `portfolio-next/`).
+
+<img src="screenshots/next-projets-api.png" alt="Liste des projets affichée à partir de l'API" width="600">
+
+---
+## 35. Frontend Next.js : compétences lues depuis l'API Express
+
+Même principe pour les compétences : les sections `Skills` (étapes du pipeline) et `DevSecOps Skills` (outils) appellent `GET /api/skills` avec la fonction `getSkills()`.
+
+```ts
+export async function getSkills(): Promise<{ stages: Stage[]; tools: Tool[] }> {
+  const res = await get("/api/skills");
+  if (!res.ok) throw new Error(`API /api/skills : erreur ${res.status}`);
+  return res.json();
+}
+```
+
+<img src="screenshots/next-skills-api.png" alt="Compétences affichées à partir de l'API" width="600">
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
