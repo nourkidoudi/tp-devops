@@ -699,4 +699,110 @@ ansible nouvelle_vm -a "docker --version"
 ```
 
 <img src="screenshots/ansible-docker-version.png" alt="Installation de Docker avec Ansible et résultat de docker --version" width="600">
+---
+## 29. Création de l'API Node.js / Express
+
+Un dossier `api/` contient une application Node.js / Express qui se lance **indépendamment du frontend**.
+
+Structure du projet :
+
+```
+tp-devops/
+├── api/
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── server.js
+│   └── data/
+│       ├── profile.js
+│       ├── projects.js
+│       ├── stages.js
+│       ├── tools.js
+│       └── experience.js
+└── portfolio-next/
+```
+
+Installation et démarrage :
+
+```bash
+cd api
+npm install
+npm start
+```
+
+L'API écoute sur le port `3001` (modifiable avec la variable `PORT`).
+
+<img src="screenshots/api-demarree.png" alt="Serveur Express démarré" width="600">
+
+---
+## 30. Route `GET /api/health`
+
+Cette route indique que l'API fonctionne : elle retourne un statut, le nom du service, le temps de fonctionnement et l'heure.
+
+```js
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "devsecops-api",
+    uptime: Math.round(process.uptime()),
+    timestamp: new Date().toISOString(),
+  });
+});
+```
+
+```bash
+curl http://localhost:3001/api/health
+```
+
+<img src="screenshots/api-health.png" alt="Résultat de GET /api/health" width="600">
+
+---
+## 31. Route `GET /api/profile`
+
+Elle retourne au format JSON les principales informations du portfolio : identité, formation, langues, présentation, contact et expériences.
+
+```js
+app.get("/api/profile", (req, res) => {
+  res.json({ ...profile, experience });
+});
+```
+
+```bash
+curl http://localhost:3001/api/profile
+```
+
+<img src="screenshots/api-profile.png" alt="Résultat de GET /api/profile" width="600">
+
+---
+## 32. Route `GET /api/projects`
+
+Elle retourne la liste des projets du portfolio. Une route supplémentaire `GET /api/projects/:slug` retourne un seul projet (utile pour la page de détail du frontend).
+
+```js
+app.get("/api/projects", (req, res) => {
+  res.json(projects);
+});
+```
+
+```bash
+curl http://localhost:3001/api/projects
+```
+
+<img src="screenshots/api-projects.png" alt="Résultat de GET /api/projects" width="600">
+
+---
+## 33. Route `GET /api/skills`
+
+Elle retourne la liste des compétences : les étapes du pipeline DevSecOps (`stages`) et les outils (`tools`).
+
+```js
+app.get("/api/skills", (req, res) => {
+  res.json({ stages, tools });
+});
+```
+
+```bash
+curl http://localhost:3001/api/skills
+```
+
+<img src="screenshots/api-skills.png" alt="Résultat de GET /api/skills" width="600">
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
