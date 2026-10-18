@@ -948,4 +948,122 @@ CMD ["node", "server.js"]
 - L'application tourne avec un **utilisateur sans droits root** (`nextjs`), par sécurité.
 - L'URL de l'API n'est pas écrite dans l'image : elle est passée au démarrage du conteneur avec la variable `API_URL` (étape 36).
 - Un fichier `.dockerignore` exclut `node_modules`, `.next`, `.git` et les fichiers `.env*` du contexte de build, pour qu'aucun secret ni fichier inutile ne soit copié dans l'image.
+
+---
+---
+## 39. Dockerfile de l'API Node.js / Express
+
+L'API est empaquetée dans une image Docker avec le fichier `api/Dockerfile` :
+
+```dockerfile
+FROM node:22-alpine
+WORKDIR /app
+
+ENV NODE_ENV=production \
+    PORT=3001
+
+# Dépendances d'abord : cette couche est réutilisée tant que package*.json ne change pas
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Code de l'API
+COPY --chown=node:node . .
+
+# L'utilisateur "node" est fourni par l'image : pas de droits root
+USER node
+EXPOSE 3001
+
+# Vérifie régulièrement que l'API répond
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+  CMD wget -qO- http://127.0.0.1:${PORT}/api/health || exit 1
+
+CMD ["node", "server.js"]
+```
+
+**Explication :**
+
+- L'image de base `node:22-alpine` est légère. Le Dockerfile n'a qu'une seule étape, car l'API n'a pas de phase de compilation.
+- Les fichiers `package.json` et `package-lock.json` sont copiés **avant** le code : Docker réutilise alors la couche des dépendances tant qu'elles ne changent pas, ce qui accélère les builds suivants.
+- `npm ci --omit=dev` installe exactement les versions du `package-lock.json`, sans les dépendances de développement.
+- L'API s'exécute avec l'utilisateur `node`, sans droits root.
+- Le `HEALTHCHECK` appelle la route `/api/health` créée à l'étape 30 : Docker sait ainsi si l'API répond vraiment, et `docker compose ps` affichera l'état `healthy`.
+- Le port est défini par la variable `PORT` (3001 par défaut). Un fichier `.dockerignore` exclut `node_modules` et `.env` de l'image.
+## 40. Construction des images Docker
+
+Deux images sont construites depuis la racine du dépôt :
+
+```bash
+docker build -t devsecops-api ./api
+docker build -t devsecops-portfolio ./portfolio-next
+```
+
+Vérification :
+
+```bash
+docker images | grep devsecops
+```
+
+<img src="screenshots/docker-images.png" alt="Images Docker construites" width="600">
+
+---
+## 41. Docker Compose : frontend + API
+
+Un fichier `docker-compose.yml` à la racine du dépôt lance le frontend et l'API ensemble :
+
+```yaml
+services:
+  api:
+    build: ./api
+    image: devsecops-api
+    container_name: devsecops-api
+    environment:
+      PORT: "3001"
+    ports:
+      - "3001:3001"
+    networks:
+      - portfolio-net
+    restart: unless-stopped
+
+  frontend:
+    build: ./portfolio-next
+    image: devsecops-portfolio
+    container_name: devsecops-portfolio
+    environment:
+      # Dans le réseau Compose, l'API est joignable par le nom de son service
+      API_URL: http://api:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - portfolio-net
+    restart: unless-stopped
+
+networks:
+  portfolio-net:
+    driver: bridge
+```
+
+**Explication :**
+
+- Les deux services sont construits à partir de leur Dockerfile (`build`) et reliés au même réseau `portfolio-net`.
+- Le frontend reçoit `API_URL=http://api:3001` : à l'intérieur du réseau Compose, `api` est le nom du service, résolu par le DNS de Docker. On n'utilise donc pas `localhost`, qui désignerait le conteneur du frontend lui-même.
+- `depends_on` avec `service_healthy` démarre le frontend seulement quand l'API répond au `HEALTHCHECK` défini dans son Dockerfile.
+- `restart: unless-stopped` relance les conteneurs automatiquement après un redémarrage de la VM.
+
+Lancement :
+
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+Résultat de `docker compose ps` :
+
+```text
+COLLER ICI LA SORTIE DE docker compose ps
+```
+
+<img src="screenshots/docker-compose-ps.png" alt="Résultat de docker compose ps" width="600">
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
