@@ -7,7 +7,7 @@ const legend: SkillState[] = ["done", "part", "wip"];
 export default function Hero() {
   return (
     <section id="top" className="hero">
-      <h1>Du code à la production, en sécurité.</h1>
+      <h1>DevOps</h1>
       <p className="lead">
         {"Je suis Nour, étudiante en Master DevOps & Cloud Computing. Voici où j'en suis sur chaque étape d'un pipeline DevSecOps."}
       </p>
