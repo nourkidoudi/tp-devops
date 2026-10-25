@@ -1,0 +1,83 @@
+---
+# Déploie le DevSecOps Portfolio (frontend Next.js + API Express) avec Docker Compose.
+# Utilisable depuis une machine d'administration (ansible-playbook) ou, via Vagrant,
+# directement dans la VM (ansible_local).
+- name: Déployer le DevSecOps Portfolio avec Docker Compose
+  hosts: all
+  become: true
+
+  vars:
+    repo_url: https://github.com/nourkidoudi/tp-devops.git
+    repo_version: main
+    app_dir: /opt/tp-devops
+
+  tasks:
+    - name: Installer git, Docker et le plugin Docker Compose
+      ansible.builtin.apt:
+        name:
+          - git
+          - docker.io
+          - docker-compose-v2
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Démarrer et activer le service Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    # Le build de Next.js consomme de la mémoire : un fichier swap évite qu'il soit tué
+    - name: Créer un fichier swap de 2 Go s'il n'y a pas de swap
+      ansible.builtin.shell: |
+        fallocate -l 2G /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+      args:
+        creates: /swapfile
+      when: ansible_swaptotal_mb | int == 0
+
+    - name: Rendre le swap permanent
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "/swapfile none swap sw 0 0"
+      when: ansible_swaptotal_mb | int == 0
+
+    - name: Récupérer le projet depuis GitHub
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: "{{ repo_version }}"
+        force: true
+
+    - name: Construire les images et démarrer le portfolio
+      ansible.builtin.command: docker compose up -d --build
+      args:
+        chdir: "{{ app_dir }}"
+      register: compose_up
+      changed_when: >-
+        'Started' in compose_up.stderr or
+        'Created' in compose_up.stderr or
+        'Recreated' in compose_up.stderr
+
+    - name: Attendre que le portfolio réponde sur le port 3000
+      ansible.builtin.uri:
+        url: http://localhost:3000
+        status_code: 200
+      register: portfolio
+      retries: 30
+      delay: 5
+      until: portfolio.status == 200
+
+    - name: Afficher l'état des conteneurs
+      ansible.builtin.command: docker compose ps
+      args:
+        chdir: "{{ app_dir }}"
+      register: compose_ps
+      changed_when: false
+
+    - name: Résultat
+      ansible.builtin.debug:
+        msg: "{{ compose_ps.stdout_lines }}"
