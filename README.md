@@ -1093,5 +1093,135 @@ docker network inspect tp-devops_portfolio-net --format '{{range .Containers}}{{
 <img src="screenshots/portfolio-api-arretee.png" alt="Portfolio quand l'API est arrêtée" width="600">
 
 Le navigateur ne contacte jamais l'API directement : c'est le serveur Next.js (dans le conteneur `frontend`) qui l'appelle à travers le réseau Compose. L'API n'a donc pas besoin d'être exposée au navigateur, et il n'y a pas de problème d'URL ni de CORS côté client.
+---
+## 43. Playbook de déploiement du portfolio avec Docker Compose
 
+Le playbook `vagrant/ansible/deploy-portfolio.yml` déploie automatiquement le portfolio sur une VM. Il :
+
+1. installe `git`, Docker et le plugin Docker Compose ;
+2. démarre le service Docker ;
+3. crée un fichier swap de 2 Go si la VM n'en a pas (le build de Next.js consomme de la mémoire) ;
+4. récupère le projet depuis GitHub dans `/opt/tp-devops` ;
+5. construit les images et démarre le portfolio avec `docker compose up -d --build` ;
+6. attend que le portfolio réponde sur le port 3000 et affiche l'état des conteneurs.
+
+```yaml
+---
+- name: Déployer le DevSecOps Portfolio avec Docker Compose
+  hosts: all
+  become: true
+
+  vars:
+    repo_url: https://github.com/nourkidoudi/tp-devops.git
+    repo_version: main
+    app_dir: /opt/tp-devops
+
+  tasks:
+    - name: Installer git, Docker et le plugin Docker Compose
+      ansible.builtin.apt:
+        name:
+          - git
+          - docker.io
+          - docker-compose-v2
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # ... démarrage de Docker, swap, récupération du dépôt (voir le fichier complet)
+
+    - name: Construire les images et démarrer le portfolio
+      ansible.builtin.command: docker compose up -d --build
+      args:
+        chdir: "{{ app_dir }}"
+
+    - name: Attendre que le portfolio réponde sur le port 3000
+      ansible.builtin.uri:
+        url: http://localhost:3000
+        status_code: 200
+      retries: 30
+      delay: 5
+```
+
+Commande utilisée depuis la VM d'administration, sur la VM cible (groupe `nouvelle_vm`) :
+
+```bash
+cd ~/ansible
+ansible-playbook ~/tp-devops/vagrant/ansible/deploy-portfolio.yml --limit nouvelle_vm
+```
+
+<img src="screenshots/ansible-deploy-portfolio.png" alt="Exécution du playbook de déploiement" width="600">
+
+Portfolio accessible sur la VM cible (`http://192.168.237.136:3000`) :
+
+<img src="screenshots/portfolio-ansible.png" alt="Portfolio déployé par Ansible" width="600">
+
+---
+## 44. Vagrant lance automatiquement le playbook Ansible
+
+Le `Vagrantfile` est modifié pour enchaîner toute la chaîne avec une seule commande :
+
+```
+vagrant up -> création VM -> configuration Ansible -> installation Docker -> déploiement Portfolio
+```
+
+Principales modifications :
+
+```ruby
+# Le dossier du projet (Vagrantfile + playbook) est copié dans la VM avec rsync
+config.vm.synced_folder ".", "/vagrant", type: "rsync", rsync__exclude: [".vagrant/"]
+
+# Le portfolio (port 3000 de la VM) est joignable depuis la machine physique
+node.vm.network "forwarded_port", guest: 3000, host: 3100, host_ip: "0.0.0.0"
+
+# Mémoire portée à 2 Go pour le build de Next.js
+vb.memory = 2048
+
+# Installe Ansible dans la VM
+node.vm.provision "shell", inline: <<-SHELL
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y ansible
+SHELL
+
+# Lance le playbook Ansible dans la VM (provisionneur ansible_local)
+node.vm.provision "ansible_local" do |ansible|
+  ansible.playbook = "ansible/deploy-portfolio.yml"
+end
+```
+
+- Le provisionneur `ansible_local` exécute Ansible **à l'intérieur de la VM** : il n'est pas nécessaire d'installer Ansible sur la machine qui lance Vagrant.
+- Les images cloud Ubuntu n'ont pas les Guest Additions de VirtualBox, donc le dossier du projet est copié avec `rsync` plutôt qu'avec le dossier partagé par défaut.
+
+Commande lancée depuis le dossier `vagrant/` :
+
+```bash
+vagrant up
+```
+
+<img src="screenshots/vagrant-up-automatisation.png" alt="vagrant up : création de la VM, Ansible, Docker et déploiement" width="600">
+
+Portfolio accessible depuis la machine physique sur `http://IP_VM_HOTE:3100` :
+
+<img src="screenshots/portfolio-vagrant.png" alt="Portfolio déployé par vagrant up" width="600">
+
+---
+## 45. Test : destruction et recréation complète de la VM
+
+La VM est détruite complètement, puis recréée :
+
+```bash
+vagrant destroy -f
+vagrant up
+```
+
+<img src="screenshots/vagrant-destroy.png" alt="vagrant destroy" width="600">
+
+Après `vagrant up`, la VM est recréée à partir de zéro, Docker est réinstallé et le portfolio est redéployé **sans aucune intervention manuelle** :
+
+<img src="screenshots/vagrant-up-redeploiement.png" alt="vagrant up après destruction" width="600">
+
+Le portfolio est de nouveau accessible :
+
+<img src="screenshots/portfolio-redeploye.png" alt="Portfolio redéployé automatiquement" width="600">
+
+**Conclusion :** toute l'infrastructure est décrite dans du code (Vagrantfile et playbook Ansible). Elle peut être détruite et reconstruite à l'identique avec une seule commande, ce qui la rend reproductible.
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
