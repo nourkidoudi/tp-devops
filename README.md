@@ -1224,4 +1224,80 @@ Le portfolio est de nouveau accessible :
 
 <img src="screenshots/portfolio-redeploye.png" alt="Portfolio redéployé automatiquement" width="600">
 
-**Conclusion :** toute l'infrastructure est décrite dans du code (Vagrantfile et playbook Ansible). Elle peut être détruite et reconstruite à l'identique avec une seule commande, ce qui la rend reproductible.**Dépôt :** https://github.com/nourkidoudi/tp-devops
+**Conclusion :** toute l'infrastructure est décrite dans du code (Vagrantfile et playbook Ansible). Elle peut être détruite et reconstruite à l'identique avec une seule commande, ce qui la rend reproductible.
+### 46 - Route POST /api/contact
+
+Requête :
+```bash
+curl -i -X POST http://localhost:3001/api/contact \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Nour Kidoudi","email":"nour@example.com","message":"Bonjour, test du formulaire"}'
+```
+
+Réponse (`201 Created`) :
+```json
+{"success":true,"message":"Message reçu, merci !"}
+```
+
+![POST /api/contact](screenshots/post-contact-curl.png)
+
+### 47 - Formulaire Next.js connecté à l'API
+
+Le formulaire envoie ses données à une route Next (`/api/contact`) qui les relaie vers l'API Express (`API_URL`). L'URL de l'API reste côté serveur.
+
+![Envoi réussi](screenshots/formulaire-envoi-reussi.png)
+
+### 48 - Validation stricte avec Zod
+
+Le schéma refuse les champs invalides et les champs inconnus.
+
+Requête refusée :
+```bash
+curl -i -X POST http://localhost:3001/api/contact \
+  -H "Content-Type: application/json" \
+  -d '{"name":"N","email":"pas-un-email","message":"hi","role":"admin"}'
+```
+Réponse : `400 Bad Request` avec la liste des champs fautifs.
+
+![Requête refusée](screenshots/zod-requete-refusee.png)
+
+### 49 - Gestion centralisée des erreurs
+
+Un middleware unique renvoie les erreurs au format `{"error": "..."}` (JSON mal formé : 400, route inconnue : 404, erreur inattendue : 500 sans détail technique).
+
+![Réponse d'erreur](screenshots/erreur-api.png)
+
+### 50 - Headers de sécurité avec Helmet
+
+```bash
+curl -I http://localhost:3001/api/health
+```
+
+![Headers Helmet](screenshots/helmet.png)
+
+### 51 - Rate limiting
+
+`POST /api/contact` est limité à 5 requêtes par 10 minutes et par IP, et l'ensemble de `/api` à 100 requêtes par minute. Au-delà : `429 Too Many Requests`.
+
+![Réponse 429](screenshots/rate-limit-429.png)
+
+### 52 - OWASP API Security Top 10 (2023)
+### 52 - OWASP API Security Top 10 (2023)
+
+| Risque | Concerne notre API ? | Mesure en place ou prévue |
+|---|---|---|
+| API1 Broken Object Level Authorization | Faible : aucune donnée par utilisateur, aucune route de lecture des messages | Aucun endpoint n'expose les messages ; à revoir si une route admin est ajoutée |
+| API2 Broken Authentication | Faible : API publique en lecture, pas de comptes | Prévu : authentification (JWT ou clé) avant toute route d'administration |
+| API3 Broken Object Property Level Authorization | Oui (`POST /api/contact`) | Schéma Zod strict : les champs inconnus (`role`, etc.) sont refusés ; réponses limitées à `success` et `message` |
+| API4 Unrestricted Resource Consumption | Oui | `express-rate-limit` (100 req/min sur `/api`, 5 messages/10 min sur le contact), corps JSON limité à 10 ko, longueurs maximales Zod |
+| API5 Broken Function Level Authorization | Faible | Seules les méthodes GET et POST sont autorisées par CORS ; aucune route d'administration |
+| API6 Unrestricted Access to Sensitive Business Flows | Oui : spam du formulaire | Rate limiting sur `/api/contact` ; prévu : honeypot ou captcha |
+| API7 Server Side Request Forgery | Non | L'API n'appelle aucune URL fournie par l'utilisateur |
+| API8 Security Misconfiguration | Oui | Helmet, CORS restreint par `CORS_ORIGIN`, erreurs 500 génériques sans stack trace, conteneur non-root, `.env.example` sans secret |
+| API9 Improper Inventory Management | Oui | Routes listées dans le README ; prévu : versionnement `/api/v1` et retrait des routes inutiles |
+| API10 Unsafe Consumption of APIs | Faible | L'API ne consomme pas d'API tierce ; la base PostgreSQL arrive à l'étape 54 (requêtes paramétrées avec Prisma) |
+
+
+
+
+**Dépôt :** https://github.com/nourkidoudi/tp-devops
