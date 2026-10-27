@@ -1,0 +1,48 @@
+# Étapes 17 et 44 : VM Ubuntu Server créée, configurée avec Ansible, Docker installé
+# et DevSecOps Portfolio déployé automatiquement par `vagrant up`.
+Vagrant.configure("2") do |config|
+  config.vm.box = "cloud-image/ubuntu-24.04"
+  # La virtualisation imbriquée ralentit le démarrage : on augmente le délai d'attente
+  config.vm.boot_timeout = 1200
+
+  # Le dossier du projet (Vagrantfile + playbook) est copié dans la VM avec rsync
+  # (les images cloud n'ont pas les Guest Additions de VirtualBox)
+  config.vm.synced_folder ".", "/vagrant", type: "rsync", rsync__exclude: [".vagrant/"]
+
+  # Nom de la VM dans Vagrant (vagrant status) et nom d'hôte
+  config.vm.define "ubuntu-devops" do |node|
+    node.vm.hostname = "ubuntu-devops"
+
+    # Adresse IP privée (réseau host-only)
+    node.vm.network "private_network", ip: "192.168.56.10"
+
+    # Le portfolio (port 3000 de la VM) est joignable depuis la machine physique
+    # via la VM hôte : http://IP_VM_HOTE:3100
+    node.vm.network "forwarded_port", guest: 3000, host: 3100, host_ip: "0.0.0.0"
+
+    node.vm.provider "virtualbox" do |vb|
+      vb.name   = "ubuntu-devops"   # nom de la VM dans VirtualBox
+      vb.memory = 2048              # mémoire en Mo (le build de Next.js en demande plus)
+      vb.cpus   = 2                 # nombre de CPU
+      # IO-APIC nécessaire pour que le système invité utilise plusieurs CPU
+      vb.customize ["modifyvm", :id, "--ioapic", "on"]
+      # Désactive la console série, qui ralentit fortement le démarrage des images cloud Ubuntu
+      vb.customize ["modifyvm", :id, "--uartmode1", "disconnected"]
+    end
+
+    node.vm.provision "shell", inline: <<-SHELL
+      echo "VM créée automatiquement par Vagrant" > /home/vagrant/bienvenue.txt
+    SHELL
+
+    # Installe Ansible dans la VM (Vagrant détecte qu'il est déjà là et ne l'installe pas)
+    node.vm.provision "shell", inline: <<-SHELL
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y ansible
+    SHELL
+
+    # Lance le playbook Ansible dans la VM : Docker puis déploiement du portfolio
+    node.vm.provision "ansible_local" do |ansible|
+      ansible.playbook = "ansible/deploy-portfolio.yml"
+    end
+  end
+end
