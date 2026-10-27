@@ -1094,6 +1094,7 @@ docker network inspect tp-devops_portfolio-net --format '{{range .Containers}}{{
 
 Le navigateur ne contacte jamais l'API directement : c'est le serveur Next.js (dans le conteneur `frontend`) qui l'appelle à travers le réseau Compose. L'API n'a donc pas besoin d'être exposée au navigateur, et il n'y a pas de problème d'URL ni de CORS côté client.
 ---
+---
 ## 43. Playbook de déploiement du portfolio avec Docker Compose
 
 Le playbook `vagrant/ansible/deploy-portfolio.yml` déploie automatiquement le portfolio sur une VM. Il :
@@ -1223,5 +1224,4 @@ Le portfolio est de nouveau accessible :
 
 <img src="screenshots/portfolio-redeploye.png" alt="Portfolio redéployé automatiquement" width="600">
 
-**Conclusion :** toute l'infrastructure est décrite dans du code (Vagrantfile et playbook Ansible). Elle peut être détruite et reconstruite à l'identique avec une seule commande, ce qui la rend reproductible.
-**Dépôt :** https://github.com/nourkidoudi/tp-devops
+**Conclusion :** toute l'infrastructure est décrite dans du code (Vagrantfile et playbook Ansible). Elle peut être détruite et reconstruite à l'identique avec une seule commande, ce qui la rend reproductible.**Dépôt :** https://github.com/nourkidoudi/tp-devops
