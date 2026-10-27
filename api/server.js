@@ -2,6 +2,9 @@
 // Elle se lance seule, sans le frontend : `npm start`.
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const { z } = require("zod");
 
 const { profile } = require("./data/profile");
 const { projects } = require("./data/projects");
@@ -11,8 +14,44 @@ const { experience } = require("./data/experience");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const CORS_ORIGIN = (process.env.CORS_ORIGIN || "http://localhost:3000").split(",");
 
-app.use(cors());
+// Erreur HTTP "attendue" : renvoyée telle quelle au client
+class HttpError extends Error {
+  constructor(status, message, details) {
+    super(message);
+    this.status = status;
+    this.details = details;
+  }
+}
+
+// Étape 50 : headers HTTP de sécurité
+app.use(helmet());
+
+// Le frontend est devant l'API (proxy) : on lit l'IP réelle pour le rate limiting
+app.set("trust proxy", 1);
+
+app.use(cors({ origin: CORS_ORIGIN, methods: ["GET", "POST"] }));
+
+// Corps JSON limité à 10 ko (anti-abus)
+app.use(express.json({ limit: "10kb" }));
+
+// Étape 51 : rate limiting
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 100,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Trop de requêtes, réessayez plus tard" },
+});
+const contactLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Trop de messages envoyés, réessayez dans quelques minutes" },
+});
+app.use("/api", apiLimiter);
 
 // Étape 30 : l'API répond, elle fonctionne
 app.get("/api/health", (req, res) => {
@@ -48,9 +87,65 @@ app.get("/api/skills", (req, res) => {
   res.json({ stages, tools });
 });
 
+// Étape 48 : validation stricte avec Zod (champs inconnus refusés)
+const contactSchema = z.strictObject({
+  name: z
+    .string({ error: "Le nom est requis" })
+    .trim()
+    .min(2, "Le nom doit contenir au moins 2 caractères")
+    .max(80, "Le nom ne doit pas dépasser 80 caractères"),
+  email: z
+    .email({ error: "Email invalide" })
+    .max(120, "L'email ne doit pas dépasser 120 caractères"),
+  message: z
+    .string({ error: "Le message est requis" })
+    .trim()
+    .min(5, "Le message doit contenir au moins 5 caractères")
+    .max(1000, "Le message ne doit pas dépasser 1000 caractères"),
+});
+
+// Étape 46 : le formulaire de contact envoie ses données ici
+app.post("/api/contact", contactLimiter, (req, res) => {
+  const result = contactSchema.safeParse(req.body);
+  if (!result.success) {
+    const details = result.error.issues.map((i) => ({
+      field: i.path.join(".") || "body",
+      message: i.message,
+    }));
+    throw new HttpError(400, "Données invalides", details);
+  }
+
+  // Pas encore de stockage : la base PostgreSQL arrive à l'étape 54
+  const { name } = result.data;
+  console.log(`Nouveau message de contact reçu (${name})`);
+
+  res.status(201).json({ success: true, message: "Message reçu, merci !" });
+});
+
 // Route inconnue
-app.use((req, res) => {
-  res.status(404).json({ error: "Route introuvable" });
+app.use((req, res, next) => {
+  next(new HttpError(404, "Route introuvable"));
+});
+
+// Étape 49 : gestion centralisée des erreurs (doit rester le DERNIER middleware)
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+
+  if (err instanceof HttpError) {
+    const body = { error: err.message };
+    if (err.details) body.details = err.details;
+    return res.status(err.status).json(body);
+  }
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "JSON mal formé" });
+  }
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({ error: "Requête trop volumineuse" });
+  }
+
+  // Erreur inattendue : on logue côté serveur, on ne révèle rien au client
+  console.error(err);
+  res.status(500).json({ error: "Erreur interne du serveur" });
 });
 
 app.listen(PORT, "0.0.0.0", () => {
