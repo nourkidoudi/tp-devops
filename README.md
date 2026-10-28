@@ -1409,5 +1409,82 @@ node --test tests/integration.test.js
 ```
 
 ![Tests d'intégration réussis](screenshots/60-tests-integration.png)
+---
+## 15. Jenkins : tests et images Docker
+
+### 61 - Exécution automatique des tests du frontend et de l'API dans Jenkins
+
+Le fichier `Jenkinsfile` a été enrichi avec deux nouveaux stages de test :
+- `Test Frontend` : exécute `npm test` dans `portfolio-next`.
+- `Test API` : exécute `npm test` dans `api`.
+
+Extrait du `Jenkinsfile` :
+
+```groovy
+        // Étape 61 : exécution automatique des tests du frontend
+        stage('Test Frontend') {
+            steps {
+                echo '=== Exécution des tests Frontend Next.js ==='
+                dir('portfolio-next') {
+                    sh 'npm test'
+                }
+            }
+        }
+
+        // Étape 61 : exécution automatique des tests de l\'API
+        stage('Test API') {
+            steps {
+                echo '=== Exécution des tests API Express ==='
+                dir('api') {
+                    sh 'npm test'
+                }
+            }
+        }
+```
+
+![Stages de tests dans Jenkins](screenshots/61-jenkins-tests.png)
+
+### 62 - Construction automatique des images Docker dans Jenkins
+
+Un stage `Build Docker Images` est ajouté au pipeline Jenkins pour construire automatiquement les images de l'API et du frontend :
+- `devsecops-portfolio`
+- `devsecops-api`
+
+Extrait du `Jenkinsfile` :
+
+```groovy
+        // Étape 62 & 63 : construction automatique des images Docker
+        stage('Build Docker Images') {
+            steps {
+                echo "=== Construction des images Docker avec le tag Git SHA : ${env.GIT_SHA} ==="
+                sh "docker build -t devsecops-portfolio:${env.GIT_SHA} -t devsecops-portfolio:latest ./portfolio-next"
+                sh "docker build -t devsecops-api:${env.GIT_SHA} -t devsecops-api:latest ./api"
+                sh 'docker images | grep devsecops || true'
+            }
+        }
+```
+
+![Construction des images Docker dans Jenkins](screenshots/62-jenkins-docker-build.png)
+
+### 63 - Utilisation du Git SHA comme tag des images Docker
+
+Pour assurer la traçabilité et l'immutabilité des conteneurs, le pipeline récupère le SHA court du commit Git (`git rev-parse --short HEAD`) dans le stage `Checkout` et l'applique comme tag sur chaque image générée :
+
+```groovy
+script {
+    env.GIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+}
+```
+
+Exemple d'images générées :
+```text
+REPOSITORY             TAG       IMAGE ID       CREATED          SIZE
+devsecops-portfolio    708e6c9   4a1b2c3d4e5f   10 seconds ago   185MB
+devsecops-portfolio    latest    4a1b2c3d4e5f   10 seconds ago   185MB
+devsecops-api          708e6c9   9f8e7d6c5b4a   25 seconds ago   142MB
+devsecops-api          latest    9f8e7d6c5b4a   25 seconds ago   142MB
+```
+
+![Images taguées avec Git SHA](screenshots/63-jenkins-docker-sha.png)
 
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
