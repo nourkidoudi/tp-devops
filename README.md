@@ -1343,5 +1343,71 @@ Dans Docker, l'API exécute `prisma migrate deploy` à chaque démarrage.
 ### 56 - Variables de connexion
 
 `.env.example` (racine) et `api/.env.example` documentent `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` et `DATABASE_URL`, sans secret réel.
+---
+## 14. Tests applicatifs
+
+### 57 - Test automatisé pour le frontend Next.js
+
+Des tests automatisés avec le test runner natif de Node.js (`node --test`) vérifient la validation côté client des champs du formulaire de contact ainsi que la configuration de l'URL de l'API.
+
+Commande :
+```bash
+cd portfolio-next
+npm test
+```
+
+![Tests frontend réussis](screenshots/57-tests-frontend.png)
+
+### 58 - Test automatisé pour les routes de l'API Express
+
+Des tests d'API automatisés avec Supertest et `node --test` vérifient les routes `GET /api/health`, `/api/profile`, `/api/projects`, `/api/skills` et la gestion d'erreur `404 Route introuvable`.
+
+Commande :
+```bash
+cd api
+npm test
+```
+
+![Tests API réussis](screenshots/58-tests-api.png)
+
+### 59 - Tests automatisés contre les entrées invalides, injections et requêtes malformées
+
+La suite de tests de sécurité (`api/tests/security.test.js`) vérifie la robustesse de l'API face aux attaques et erreurs courantes :
+
+1. **Validation stricte (Zod) :** Rejet des requêtes avec champs manquants, noms trop courts (< 2 car.), emails invalides et messages trop courts (< 5 car.) avec code `400 Bad Request`.
+2. **Protection contre l'escalade / Mass Assignment :** Rejet des champs non autorisés (ex: `role: admin`, `isAdmin: true`) grâce à `z.strictObject`.
+3. **Injections SQL :** Requêtes paramétrées via Prisma garantissant que les charges utiles malveillantes (ex: `'; DROP TABLE...`) sont traitées comme du texte brut sans risque d'exécution.
+4. **Injections XSS :** Préservation sécurisée des chaînes sans exécution de scripts.
+5. **Requêtes malformées :** Détection et rejet des JSON syntaxiquement invalides (`400 Bad Request`).
+6. **Déni de service (DoS) :** Rejet des charges utiles dépassant la limite fixée à 10 ko (`413 Payload Too Large`).
+
+Résultats des tests :
+```text
+✔ Refuse une requête sans nom (400 Bad Request)
+✔ Refuse un nom trop court (< 2 caractères)
+✔ Refuse une adresse email malformée
+✔ Refuse un message trop court (< 5 caractères)
+✔ Refuse l'injection de champs non autorisés (Mass Assignment / role: admin)
+✔ Traite sans risque les chaînes contenant des injections SQL (Prisma paramétré)
+✔ Traite sans risque les tentatives d'injection XSS (<script>alert(1)</script>)
+✔ Rejette un corps JSON mal formé (400 Bad Request)
+✔ Rejette une charge utile dépassant la limite de 10 ko (413 Payload Too Large)
+```
+
+### 60 - Test d'intégration chaîne complète (Frontend -> API -> PostgreSQL)
+
+Un test d'intégration vérifie la chaîne de bout en bout :
+1. Une requête simulant l'envoi depuis le formulaire Next.js est envoyée à l'API Express (`POST /api/contact`).
+2. L'API valide les données et les persiste dans PostgreSQL via Prisma.
+3. Le test interroge directement la base de données PostgreSQL pour vérifier que la ligne a été créée avec les bonnes valeurs (`id`, `name`, `email`, `message`, `created_at`).
+4. Les données de test sont automatiquement nettoyées après exécution.
+
+Commande :
+```bash
+cd api
+node --test tests/integration.test.js
+```
+
+![Tests d'intégration réussis](screenshots/60-tests-integration.png)
 
 **Dépôt :** https://github.com/nourkidoudi/tp-devops

@@ -149,9 +149,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Erreur interne du serveur" });
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`API démarrée sur le port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`API démarrée sur le port ${PORT}`);
+  });
+}
+
+module.exports = app;
 
 // Ferme proprement la connexion à la base à l'arrêt du conteneur
 process.on("SIGTERM", async () => {
