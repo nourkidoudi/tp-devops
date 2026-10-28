@@ -1,4 +1,4 @@
-﻿// Pipeline Jenkins du DevSecOps Portfolio
+// Pipeline Jenkins du DevSecOps Portfolio
 pipeline {
     agent any
 
