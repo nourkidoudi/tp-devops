@@ -1299,5 +1299,49 @@ curl -I http://localhost:3001/api/health
 
 
 
+---
+## 13. Base de données PostgreSQL
+
+### 53 - Service PostgreSQL dans Docker Compose
+
+```yaml
+  db:
+    image: postgres:17-alpine
+    container_name: devsecops-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+```
+
+Les identifiants sont lus depuis un fichier `.env` non versionné (modèle : `.env.example`).
+
+![docker compose ps](screenshots/53-compose-ps.png)
+
+### 54 - Enregistrement des messages dans PostgreSQL
+
+`POST /api/contact` enregistre chaque message validé dans la table `contact_messages` via Prisma.
+
+![Données enregistrées](screenshots/54-table-contact.png)
+
+### 55 - Migrations avec Prisma
+
+```bash
+# développement : crée et applique une migration
+npx prisma migrate dev --name init
+
+# production / conteneur : applique les migrations existantes
+npx prisma migrate deploy
+```
+
+Dans Docker, l'API exécute `prisma migrate deploy` à chaque démarrage.
+
+### 56 - Variables de connexion
+
+`.env.example` (racine) et `api/.env.example` documentent `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` et `DATABASE_URL`, sans secret réel.
 
 **Dépôt :** https://github.com/nourkidoudi/tp-devops

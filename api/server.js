@@ -5,6 +5,9 @@ const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { z } = require("zod");
+const { PrismaClient } = require("@prisma/client");
+
+const prisma = new PrismaClient();
 
 const { profile } = require("./data/profile");
 const { projects } = require("./data/projects");
@@ -104,8 +107,8 @@ const contactSchema = z.strictObject({
     .max(1000, "Le message ne doit pas dépasser 1000 caractères"),
 });
 
-// Étape 46 : le formulaire de contact envoie ses données ici
-app.post("/api/contact", contactLimiter, (req, res) => {
+// Étape 46 / 54 : le formulaire de contact envoie ses données ici, elles sont stockées dans PostgreSQL
+app.post("/api/contact", contactLimiter, async (req, res) => {
   const result = contactSchema.safeParse(req.body);
   if (!result.success) {
     const details = result.error.issues.map((i) => ({
@@ -115,11 +118,9 @@ app.post("/api/contact", contactLimiter, (req, res) => {
     throw new HttpError(400, "Données invalides", details);
   }
 
-  // Pas encore de stockage : la base PostgreSQL arrive à l'étape 54
-  const { name } = result.data;
-  console.log(`Nouveau message de contact reçu (${name})`);
+  const saved = await prisma.contactMessage.create({ data: result.data });
 
-  res.status(201).json({ success: true, message: "Message reçu, merci !" });
+  res.status(201).json({ success: true, message: "Message reçu, merci !", id: saved.id });
 });
 
 // Route inconnue
@@ -150,4 +151,10 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`API démarrée sur le port ${PORT}`);
+});
+
+// Ferme proprement la connexion à la base à l'arrêt du conteneur
+process.on("SIGTERM", async () => {
+  await prisma.$disconnect();
+  process.exit(0);
 });
