@@ -54,12 +54,11 @@ pipeline {
             }
         }
 
-        // Etape 65 : SAST avec Semgrep
+        // Etape 65 : SAST avec Semgrep (via Docker pour eviter les problemes d installation)
         stage('Semgrep SAST') {
             steps {
                 echo '=== Analyse SAST avec Semgrep ==='
-                // Analyse le code JS/TS et echoue sur erreur critique (Etape 69)
-                sh 'semgrep scan --config auto --error'
+                sh 'docker run --rm -v $(pwd):/src returntocorp/semgrep semgrep scan --config auto --error'
             }
         }
 
@@ -117,16 +116,15 @@ pipeline {
             }
         }
 
-        // Etape 68 : Scan des images Docker avec Trivy
+        // Etape 68 : Scan des images Docker avec Trivy (via Docker)
         stage('Trivy Image Scan') {
             steps {
                 script {
                     echo '=== Scan de l image API avec Trivy ==='
-                    // Etape 69 : echoue si une vulnerabilite critique est detectee
-                    sh "trivy image --severity CRITICAL --exit-code 1 devsecops-api:${env.GIT_SHA}"
+                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --severity CRITICAL --exit-code 1 devsecops-api:${env.GIT_SHA}"
                     
                     echo '=== Scan de l image Portfolio avec Trivy ==='
-                    sh "trivy image --severity CRITICAL --exit-code 1 devsecops-portfolio:${env.GIT_SHA}"
+                    sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --severity CRITICAL --exit-code 1 devsecops-portfolio:${env.GIT_SHA}"
                 }
             }
         }
