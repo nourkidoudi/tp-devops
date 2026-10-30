@@ -107,6 +107,8 @@ pipeline {
                 dir('portfolio-next') {
                     sh 'npm run build'
                 }
+                echo '=== Nettoyage des dependances locales pour liberer de l espace ==='
+                sh 'rm -rf portfolio-next/node_modules api/node_modules'
             }
         }
 
