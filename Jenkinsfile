@@ -10,7 +10,6 @@ pipeline {
     environment {
         CI = 'true'
         NEXT_TELEMETRY_DISABLED = '1'
-        GIT_SHA = ''
     }
 
     stages {
@@ -19,25 +18,58 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    env.GIT_SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    // Utilise le commit fourni par Jenkins ou le calcule manuellement
+                    def gitCommit = env.GIT_COMMIT ?: sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    env.GIT_SHA = gitCommit.take(7)
                     echo "Git Commit SHA : ${env.GIT_SHA}"
                 }
-                sh 'git log -1 --oneline'
             }
         }
 
-        // Etape 23 : installation des dependances
-        stage('Install dependencies') {
+        // Etapes 23 & 66 : installation des dependances et audit Node.js
+        stage('Install & Audit dependencies') {
             steps {
-                echo '=== Installation des dependances Frontend Next.js ==='
+                echo '=== Installation et Audit Frontend Next.js ==='
                 dir('portfolio-next') {
                     sh 'npm ci --no-audit --no-fund'
+                    // Etape 66 : npm audit (ne fait pas echouer le build ici pour permettre le scan suivant)
+                    sh 'npm audit --audit-level=critical || true'
                 }
-                echo '=== Installation des dependances API Express ==='
+                echo '=== Installation et Audit API Express ==='
                 dir('api') {
                     sh 'npm ci --no-audit --no-fund'
                     sh 'npx prisma generate'
+                    // Etape 66 : npm audit
+                    sh 'npm audit --audit-level=critical || true'
                 }
+            }
+        }
+
+        // Etape 64 : Scan des secrets avec Gitleaks
+        stage('Gitleaks Secret Scan') {
+            steps {
+                echo '=== Scan des secrets avec Gitleaks ==='
+                // Etape 69 : echoue si un secret est trouve
+                sh 'gitleaks detect --source . -v --exit-code 1'
+            }
+        }
+
+        // Etape 65 : SAST avec Semgrep
+        stage('Semgrep SAST') {
+            steps {
+                echo '=== Analyse SAST avec Semgrep ==='
+                // Analyse le code JS/TS et echoue sur erreur critique (Etape 69)
+                sh 'semgrep scan --config auto --error'
+            }
+        }
+
+        // Etape 67 : OWASP Dependency-Check
+        stage('OWASP Dependency-Check') {
+            steps {
+                echo '=== Scan des dependances avec OWASP Dependency-Check ==='
+                // Etape 69 : echoue si une vulnerabilite critique est trouvee (CVSS > 7)
+                dependencyCheck additionalArguments: '--format HTML --format JSON --failOnCVSS 7', odcInstallation: 'DP-Check'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
 
@@ -81,6 +113,20 @@ pipeline {
                     
                     echo '=== Images Docker generees ==='
                     sh 'docker images | grep devsecops'
+                }
+            }
+        }
+
+        // Etape 68 : Scan des images Docker avec Trivy
+        stage('Trivy Image Scan') {
+            steps {
+                script {
+                    echo '=== Scan de l image API avec Trivy ==='
+                    // Etape 69 : echoue si une vulnerabilite critique est detectee
+                    sh "trivy image --severity CRITICAL --exit-code 1 devsecops-api:${env.GIT_SHA}"
+                    
+                    echo '=== Scan de l image Portfolio avec Trivy ==='
+                    sh "trivy image --severity CRITICAL --exit-code 1 devsecops-portfolio:${env.GIT_SHA}"
                 }
             }
         }
