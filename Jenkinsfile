@@ -62,13 +62,22 @@ pipeline {
             }
         }
 
-        // Etape 67 : OWASP Dependency-Check
+        // Etape 67 : OWASP Dependency-Check (via Docker)
         stage('OWASP Dependency-Check') {
             steps {
                 echo '=== Scan des dependances avec OWASP Dependency-Check ==='
-                // Etape 69 : echoue si une vulnerabilite critique est trouvee (CVSS > 7)
-                dependencyCheck additionalArguments: '--format HTML --format JSON --failOnCVSS 7', odcInstallation: 'DP-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+                sh '''
+                    docker run --rm \
+                        -v $(pwd):/src \
+                        -v $(pwd)/odc-reports:/report \
+                        owasp/dependency-check:latest \
+                        --project "DevSecOps Portfolio" \
+                        --scan /src \
+                        --format "HTML" \
+                        --format "JSON" \
+                        --out /report \
+                        --failOnCVSS 7
+                '''
             }
         }
 
