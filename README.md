@@ -1431,7 +1431,7 @@ Extrait du `Jenkinsfile` :
             }
         }
 
-        // Étape 61 : exécution automatique des tests de l\'API
+        // Étape 61 : exécution automatique des tests de l'API
         stage('Test API') {
             steps {
                 echo '=== Exécution des tests API Express ==='
@@ -1453,13 +1453,18 @@ Un stage `Build Docker Images` est ajouté au pipeline Jenkins pour construire a
 Extrait du `Jenkinsfile` :
 
 ```groovy
-        // Étape 62 & 63 : construction automatique des images Docker
+        // Etapes 62 & 63 : images Docker avec tag Git SHA
         stage('Build Docker Images') {
             steps {
-                echo "=== Construction des images Docker avec le tag Git SHA : ${env.GIT_SHA} ==="
-                sh "docker build -t devsecops-portfolio:${env.GIT_SHA} -t devsecops-portfolio:latest ./portfolio-next"
-                sh "docker build -t devsecops-api:${env.GIT_SHA} -t devsecops-api:latest ./api"
-                sh 'docker images | grep devsecops || true'
+                script {
+                    echo "=== Construction des images Docker tag: ${env.GIT_SHA} ==="
+                    // Construction des images avec le tag Git SHA et le tag latest
+                    sh "docker build -t devsecops-api:${env.GIT_SHA} -t devsecops-api:latest ./api"
+                    sh "docker build -t devsecops-portfolio:${env.GIT_SHA} -t devsecops-portfolio:latest ./portfolio-next"
+                    
+                    echo '=== Images Docker generees ==='
+                    sh 'docker images | grep devsecops'
+                }
             }
         }
 ```
@@ -1479,10 +1484,10 @@ script {
 Exemple d'images générées :
 ```text
 REPOSITORY             TAG       IMAGE ID       CREATED          SIZE
-devsecops-portfolio    708e6c9   4a1b2c3d4e5f   10 seconds ago   185MB
-devsecops-portfolio    latest    4a1b2c3d4e5f   10 seconds ago   185MB
-devsecops-api          708e6c9   9f8e7d6c5b4a   25 seconds ago   142MB
-devsecops-api          latest    9f8e7d6c5b4a   25 seconds ago   142MB
+devsecops-api          1dc2d4b   1e058f8aeeeb   1 minute ago     238MB
+devsecops-api          latest    1e058f8aeeeb   1 minute ago     238MB
+devsecops-portfolio    1dc2d4b   cb32a5863a78   1 minute ago     85.8MB
+devsecops-portfolio    latest    cb32a5863a78   1 minute ago     85.8MB
 ```
 
 ![Images taguées avec Git SHA](screenshots/63-jenkins-docker-sha.png)

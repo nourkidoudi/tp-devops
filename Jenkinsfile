@@ -74,20 +74,13 @@ pipeline {
         stage('Build Docker Images') {
             steps {
                 script {
-                    def sha = (env.GIT_SHA?.trim()) ?: sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    echo "=== Construction des images Docker tag: ${sha} ==="
-  try {
-                        // API d abord (plus rapide)
-                        sh "docker build --cache-from devsecops-api:latest -t devsecops-api:${sha} -t devsecops-api:latest ./api"
-                        // Portfolio avec le cache existant
-                        sh "docker build --cache-from devsecops-portfolio:latest -t devsecops-portfolio:${sha} -t devsecops-portfolio:latest ./portfolio-next"
-                        echo '=== Images Docker generees ==='
-                        sh 'docker images | grep devsecops'
-                } catch (exception) {
-                        echo "WARNING: docker build failed: ${exception.message}"
-                        echo "Images existantes:"
-                        sh 'docker images | grep devsecops || echo Aucune image'
-                }
+                    echo "=== Construction des images Docker tag: ${env.GIT_SHA} ==="
+                    // Construction des images avec le tag Git SHA et le tag latest
+                    sh "docker build -t devsecops-api:${env.GIT_SHA} -t devsecops-api:latest ./api"
+                    sh "docker build -t devsecops-portfolio:${env.GIT_SHA} -t devsecops-portfolio:latest ./portfolio-next"
+                    
+                    echo '=== Images Docker generees ==='
+                    sh 'docker images | grep devsecops'
                 }
             }
         }
@@ -95,7 +88,10 @@ pipeline {
 
     post {
         success {
-            echo "Pipeline OK : images taguees ${env.GIT_SHA}."
+            script {
+                def sha = env.GIT_SHA ?: "inconnu"
+                echo "Pipeline OK : images taguees ${sha}."
+            }
         }
         failure {
             echo 'Pipeline en ECHEC : voir la console du stage en erreur.'
