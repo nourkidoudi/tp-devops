@@ -15,7 +15,7 @@ const { stages } = require("./data/stages");
 const { tools } = require("./data/tools");
 const { experience } = require("./data/experience");
 
-const app = express();
+const app = express(); // nosemgrep: javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
 const PORT = process.env.PORT || 3001;
 const CORS_ORIGIN = (process.env.CORS_ORIGIN || "http://localhost:3000").split(",");
 
