@@ -1,0 +1,35 @@
+# Partie 17 - Tache 74 : analyse statique CodeQL (GitHub Advanced Security)
+name: CodeQL
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Analyse hebdomadaire (lundi 06:00 UTC)
+    - cron: '0 6 * * 1'
+
+# CodeQL a besoin d'ecrire les resultats dans l'onglet "Security > Code scanning"
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyse CodeQL
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'javascript-typescript' ]
+    steps:
+      - name: Recuperation du depot
+        # Tache 77 : action epinglee sur un SHA de commit immuable
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Initialisation de CodeQL
+        uses: github/codeql-action/init@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3
+        with:
+          languages: ${{ matrix.language }}
+      - name: Analyse CodeQL
+        uses: github/codeql-action/analyze@4bfa242aa49c5f7c6770b98670d354a7dfac05f8 # v3

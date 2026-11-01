@@ -1605,4 +1605,347 @@ Le pipeline est configuré pour **échouer** (`exit code 1`) dès qu'un secret e
 
 ---
 
+## 17. GitHub Actions et sécurité GitHub
+
+Le pipeline Jenkins s'exécute sur la VM locale. Cette partie ajoute un second pipeline, **GitHub Actions**, exécuté dans le cloud de GitHub : les tests et les contrôles de sécurité ne dépendent donc plus d'une machine allumée, et la sécurité tourne dès le `push` puis à chaque `pull_request` (approche « shift-left »).
+
+Fichiers ajoutés :
+
+```text
+.github/workflows/ci.yml        # tests + sécurité + build/scan des images Docker
+.github/workflows/codeql.yml    # analyse CodeQL (SAST GitHub Advanced Security)
+.github/workflows/release.yml   # releases automatiques (semantic-release)
+.github/dependabot.yml          # veille des dépendances + PR automatiques
+.releaserc.json                 # configuration de semantic-release
+```
+
+### 70 - Workflow GitHub Actions : tests frontend et API
+
+Le workflow `.github/workflows/ci.yml` est déclenché sur `push` et sur `pull_request` vers `main`, et exécute dans un job dédié les tests du frontend puis ceux de l'API :
+
+```yaml
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    name: Tests frontend et API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Tests frontend (Next.js)
+        working-directory: portfolio-next
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+      - name: Tests API (Express)
+        working-directory: api
+        run: |
+          npm ci --no-audit --no-fund
+          npx prisma generate
+          npm test
+```
+
+> Le test d'intégration de l'API (`api/tests/integration.test.js`) se met automatiquement en `skip` si PostgreSQL n'est pas joignable dans le runner : inutile de monter une base de données dans la CI.
+
+### 71 - Secrets, SAST et contrôle des dépendances dans le workflow
+
+Un second job `security` ajoute trois contrôles :
+
+```yaml
+  security:
+    name: Secrets, SAST et dependances
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Scan des secrets (Gitleaks)
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: SAST (Semgrep)
+        run: docker run --rm -v "$PWD:/src" semgrep/semgrep semgrep scan --config auto --error
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Controle des dependances (npm audit - frontend)
+        working-directory: portfolio-next
+        run: npm audit --audit-level=critical
+      - name: Controle des dependances (npm audit - API)
+        working-directory: api
+        run: npm audit --audit-level=critical
+```
+
+- **Gitleaks** : scan de tout l'historique Git (`fetch-depth: 0`) à la recherche de secrets.
+- **Semgrep** : SAST via l'image Docker officielle (mêmes règles que dans le pipeline Jenkins).
+- **npm audit** : échoue si une vulnérabilité de sévérité `critical` est présente.
+
+### 72 - Construction des deux images Docker dans le workflow
+
+```yaml
+  images:
+    name: Build et scan des images Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Construction de l'image API
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./api
+          load: true
+          tags: devsecops-api:${{ github.sha }}
+      - name: Construction de l'image Portfolio
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./portfolio-next
+          load: true
+          tags: devsecops-portfolio:${{ github.sha }}
+```
+
+Les images sont taguées avec le **SHA du commit** (`${{ github.sha }}`), comme dans le pipeline Jenkins (tâche 63).
+
+### 73 - Scan des images avec Trivy
+
+```yaml
+      - name: Scan Trivy - image API
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87 # master
+        with:
+          image-ref: devsecops-api:${{ github.sha }}
+          severity: CRITICAL
+          exit-code: '1'
+      - name: Scan Trivy - image Portfolio
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87 # master
+        with:
+          image-ref: devsecops-portfolio:${{ github.sha }}
+          severity: CRITICAL
+          exit-code: '1'
+```
+
+`exit-code: '1'` fait échouer le job (donc le workflow) dès qu'une vulnérabilité **CRITICAL** est trouvée dans une image — même comportement que dans Jenkins.
+
+### 74 - CodeQL (GitHub Advanced Security) et comparaison avec Semgrep
+
+Le workflow `.github/workflows/codeql.yml` active **CodeQL**, le moteur SAST intégré à GitHub Advanced Security (gratuit sur les dépôts publics). Il analyse la langue `javascript-typescript` à chaque `push`, `pull_request`, et une fois par semaine (analyse planifiée). Les alertes sont consultables dans **Security → Code scanning alerts**.
+
+**Tableau comparatif des alertes détectées :**
+
+| Alerte | Semgrep | CodeQL | Fichier | Sévérité | Décision |
+|---|---|---|---|---|---|
+| Absence de middleware CSRF (`express-check-csurf-middleware-usage`) | ✅ détecté | à compléter | `api/server.js` | Warning (bloquant dans Jenkins) | Neutralisé par `// nosemgrep` : l'API est publique, sans session ni cookie, donc sans surface CSRF |
+| *(autres alertes CodeQL)* | à compléter | à compléter | — | — | — |
+
+> La colonne **CodeQL** est à compléter après le premier run (onglet **Security → Code scanning**). Les deux outils sont complémentaires : Semgrep applique des règles de sécurité communautaires (très rapide, faux positifs possibles), tandis que CodeQL construit un graphe de données du code (analyse plus profonde, orientée flux de données).
+
+### 75 - Dependabot : dépendances vulnérables et PR automatiques
+
+Le fichier `.github/dependabot.yml` surveille chaque semaine les dépendances **npm** (frontend et API), les **actions GitHub** et les images de base des **Dockerfiles** :
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /portfolio-next
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: fix
+  - package-ecosystem: npm
+    directory: /api
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: fix
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+  - package-ecosystem: docker
+    directory: /portfolio-next
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /api
+    schedule:
+      interval: weekly
+```
+
+Dependabot ouvre automatiquement une **Pull Request** proposant la mise à jour (et, en complément, les alertes de sécurité Dependabot listent les dépendances vulnérables).
+
+![Pull Request générée automatiquement par Dependabot](screenshots/75-dependabot-pr.png)
+
+### 76 - Permissions minimales du GITHUB_TOKEN
+
+Chaque workflow déclare le strict nécessaire. Par défaut le workflow CI n'a **que** la lecture :
+
+```yaml
+permissions:
+  contents: read
+```
+
+Seuls les workflows qui en ont réellement besoin demandent plus :
+
+| Workflow | Permissions | Pourquoi |
+|---|---|---|
+| `ci.yml` | `contents: read` | juste lire le code et construire les images |
+| `codeql.yml` | `contents: read`, `security-events: write` | publier les résultats dans l'onglet Security |
+| `release.yml` | `contents: write`, `issues: write`, `pull-requests: write` | créer le tag, la release et le changelog |
+
+Le principe est le **least privilege** : si un workflow est compromis, le token volé ne peut ni modifier le code ni publier de release non désirée.
+
+### 77 - Actions tierces épinglées par SHA + la chaîne CI/CD comme surface d'attaque
+
+Toutes les actions tierces sont référencées par le **SHA du commit** plutôt que par un tag de version (les tags comme `@v4` sont des références **mutables** : leur auteur peut les redéplacer vers un autre commit) :
+
+```yaml
+# Vulnérable : le tag v4 peut être redeplacé vers un commit malveillant
+- uses: actions/checkout@v4
+# Sûr : SHA immuable, le contenu référencé ne peut pas changer
+- uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+```
+
+**Pourquoi les chaînes CI/CD sont elles-mêmes une surface d'attaque :**
+
+- Un pipeline CI/CD détient des **secrets** (tokens GitHub, identifiants de registre, clés de déploiement) : c'est une cible de choix pour un attaquant.
+- Il exécute du **code arbitraire** (scripts de build, actions tierces) avec ces privilèges : une action compromise peut exfiltrer les secrets ou injecter du code dans l'artefact livré (attaque de la *supply chain*, cf. l'incident `tj-actions/changed-files` en 2025).
+- Il se déclenche automatiquement sur des **Pull Requests** : une PR malveillante (d'un fork) peut tenter d'exécuter du code dans le runner.
+- Il peut **publier** des artefacts (images Docker, releases) : un pipeline détourné peut diffuser une version piégée aux utilisateurs.
+
+Les contre-mesures appliquées ici : permissions minimales du token (76), épinglage par SHA (77), scan automatique des secrets/dépendances/images (71-73), et protection de branche imposant la revue (79-81).
+
+### 78 - Comparaison GitHub Actions / Jenkins
+
+| Critère | Jenkins (VM locale) | GitHub Actions |
+|---|---|---|
+| Hébergement | VM Ubuntu personnelle (`192.168.237.130:8080`) | Runners hébergés par GitHub |
+| Configuration | `Jenkinsfile` (Groovy) + réglages dans l'UI | YAML versionné dans `.github/workflows/` |
+| Déclenchement | Webhook / SCM polling / manuel | `push`, `pull_request`, `schedule` |
+| Exécuteurs | Exécuteur intégré au contrôleur Jenkins | `ubuntu-latest` (jetable, isolé) |
+| Sécurité | Plugins à maintenir, installation manuelle des outils | Actions épinglées + permissions minimales + sécurité intégrée |
+| SAST / sécurité | Semgrep, Trivy via Docker (montage du socket) | Semgrep, Trivy + **CodeQL / GHAS** intégré |
+| Gestion des dépendances | `npm audit` seulement | `npm audit` + **Dependabot** + alertes de sécurité |
+| Coût / maintenance | Machine à administrer (disque, mises à jour) | Gratuit pour les dépôts publics, zéro maintenance |
+
+**En résumé :** Jenkins est très flexible et s'exécute sur notre propre infrastructure (utile pour du *self-hosted* ou des besoins réseau locaux), tandis que GitHub Actions est directement intégré au dépôt, ne demande aucune maintenance et apporte nativement CodeQL et Dependabot. Les deux pipelines partagent la même logique (tests → secrets → SAST → dépendances → images → scan des images).
+
+---
+
+## 18. Git Workflow
+
+### 79 - Stratégie de branches : branch → Pull Request → review → merge
+
+Aucun développement n'est fait directement sur `main`. Le cycle est :
+
+```text
+git checkout -b feat/formulaire-contact
+# ... commits ...
+git push -u origin feat/formulaire-contact
+# -> Pull Request vers main -> review -> merge
+```
+
+**Convention de nommage des branches :**
+
+| Préfixe | Type de travail | Exemple |
+|---|---|---|
+| `feat/` | nouvelle fonctionnalité | `feat/formulaire-contact` |
+| `fix/` | correction de bug | `fix/validation-email` |
+| `docs/` | documentation | `docs/readme-partie-17` |
+| `chore/` | tâche technique (CI, dépendances) | `chore/maj-next` |
+| `refactor/` | refactorisation sans changement de comportement | `refactor/routes-api` |
+| `test/` | ajout ou modification de tests | `test/api-securite` |
+
+Les noms sont en minuscules, avec des mots séparés par des tirets (`-`).
+
+### 80 - Protection de la branche `main` et interdiction du push direct
+
+Dans **Settings → Rules → Rulesets** (ou **Branches → Add branch protection rule**), sur le motif `main` :
+
+- ✅ **Require a pull request before merging** (avec 1 approval)
+- ✅ **Require status checks to pass before merging**
+- ✅ **Do not allow bypassing the above settings** — interdit les `git push` directs, même à l'administrateur.
+
+Toute modification de `main` passe donc obligatoirement par une Pull Request.
+
+### 81 - Contrôles obligatoires avant merge d'une Pull Request
+
+Toujours dans la règle de protection, la section **Require status checks to pass** impose ces quatre contrôles :
+
+| Contrôle affiché dans GitHub | Provenance |
+|---|---|
+| `Tests frontend et API` | job `tests` de `ci.yml` |
+| `Secrets, SAST et dependances` | job `security` de `ci.yml` |
+| `Build et scan des images Docker` | job `images` de `ci.yml` |
+| `Analyse CodeQL` | job `analyze` de `codeql.yml` |
+
+Une Pull Request qui échoue à l'un de ces contrôles ne peut pas être fusionnée : le bouton « Merge » reste désactivé.
+
+![Pull Request bloquée par un contrôle en échec](screenshots/81-pr-bloquee.png)
+
+### 82 - Conventional Commits
+
+Les messages de commit suivent la convention **Conventional Commits** : `<type>(<scope>): <description>`.
+
+```text
+feat: ajout du formulaire de contact
+fix: correction de la validation email
+docs: mise à jour du README
+chore(ci): mise à jour du workflow GitHub Actions
+```
+
+Types utilisés : `feat`, `fix`, `docs`, `chore`, `refactor`, `test`, `perf`. Cette convention est celle employée dans l'historique de ce dépôt, et elle est **exploitée automatiquement** par semantic-release (tâche 84) pour décider de la version à publier.
+
+### 83 - Semantic Versioning (SemVer)
+
+Les releases sont numérotées `MAJOR.MINOR.PATCH` :
+
+| Incrément | Quand | Exemple |
+|---|---|---|
+| **MAJOR** | rupture de compatibilité (`BREAKING CHANGE`) | `1.4.2` → `2.0.0` |
+| **MINOR** | nouvelle fonctionnalité compatible (`feat`) | `1.4.2` → `1.5.0` |
+| **PATCH** | correction compatible (`fix`) | `1.4.2` → `1.4.3` |
+
+Le type du commit (tâche 82) détermine donc mécaniquement l'incrément de version.
+
+### 84 - Génération automatique du changelog et des releases
+
+Le workflow `.github/workflows/release.yml` lance **semantic-release** à chaque push sur `main`. Il analyse les Conventional Commits depuis le dernier tag, calcule la nouvelle version SemVer, met à jour `CHANGELOG.md`, crée le **tag Git** et publie une **GitHub Release** avec les notes de version.
+
+```yaml
+name: Release
+on:
+  push:
+    branches: [ main ]
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: cycjimmy/semantic-release-action@16ca923e6ccbb50770c415a0ccd43709a8c5f7a4 # v4
+        with:
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+![Release générée automatiquement par semantic-release](screenshots/84-release.png)
+
+---
+
 **Dépôt :** https://github.com/nourkidoudi/tp-devops

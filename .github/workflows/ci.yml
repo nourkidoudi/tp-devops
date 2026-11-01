@@ -1,0 +1,108 @@
+# Partie 17 - GitHub Actions : pipeline CI DevSecOps
+# Taches 70 a 73, 76 et 77
+name: CI DevSecOps
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Tache 76 : permissions minimales du GITHUB_TOKEN (lecture seule du depot).
+# Aucune permission d'ecriture n'est accordee au token : le strict necessaire.
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Tache 70 : execution automatique des tests frontend et API
+  # ---------------------------------------------------------------------------
+  tests:
+    name: Tests frontend et API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperation du depot
+        # Tache 77 : action tierce epinglee sur un SHA de commit immuable (v4)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Installation de Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Tests frontend (Next.js)
+        working-directory: portfolio-next
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+      - name: Tests API (Express)
+        working-directory: api
+        run: |
+          npm ci --no-audit --no-fund
+          npx prisma generate
+          npm test
+
+  # ---------------------------------------------------------------------------
+  # Tache 71 : scan des secrets (Gitleaks), SAST (Semgrep) et dependances (npm audit)
+  # ---------------------------------------------------------------------------
+  security:
+    name: Secrets, SAST et dependances
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperation du depot (historique complet pour Gitleaks)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Scan des secrets (Gitleaks)
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: SAST (Semgrep)
+        run: docker run --rm -v "$PWD:/src" semgrep/semgrep semgrep scan --config auto --error
+      - name: Installation de Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Controle des dependances (npm audit - frontend)
+        working-directory: portfolio-next
+        run: npm audit --audit-level=critical
+      - name: Controle des dependances (npm audit - API)
+        working-directory: api
+        run: npm audit --audit-level=critical
+
+  # ---------------------------------------------------------------------------
+  # Taches 72 et 73 : construction des deux images Docker et scan Trivy
+  # ---------------------------------------------------------------------------
+  images:
+    name: Build et scan des images Docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperation du depot
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Configuration de Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Construction de l'image API
+        # Tache 72 : construction automatique de l'image devsecops-api
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./api
+          load: true
+          tags: devsecops-api:${{ github.sha }}
+      - name: Construction de l'image Portfolio
+        # Tache 72 : construction automatique de l'image devsecops-portfolio
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./portfolio-next
+          load: true
+          tags: devsecops-portfolio:${{ github.sha }}
+      - name: Scan Trivy - image API
+        # Tache 73 : scan de vulnerabilites de l'image, echec si CRITICAL
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87 # master
+        with:
+          image-ref: devsecops-api:${{ github.sha }}
+          severity: CRITICAL
+          exit-code: '1'
+      - name: Scan Trivy - image Portfolio
+        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87 # master
+        with:
+          image-ref: devsecops-portfolio:${{ github.sha }}
+          severity: CRITICAL
+          exit-code: '1'

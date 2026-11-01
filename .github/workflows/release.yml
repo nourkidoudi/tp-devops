@@ -1,0 +1,32 @@
+# Partie 18 - Taches 82 a 84 : releases automatiques (Semantic Release)
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+
+# Tache 76 : permissions minimales mais suffisantes pour publier une release
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Release semantique
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperation du depot (historique complet, necessaire pour les tags)
+        # Tache 77 : action epinglee sur un SHA de commit immuable
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Generation du changelog et de la release
+        # Analyse les Conventional Commits (feat/fix/...) pour deduire la version SemVer
+        uses: cycjimmy/semantic-release-action@16ca923e6ccbb50770c415a0ccd43709a8c5f7a4 # v4
+        with:
+          extra_plugins: |
+            @semantic-release/changelog
+            @semantic-release/git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
