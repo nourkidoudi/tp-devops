@@ -1917,7 +1917,7 @@ Le type du commit (tâche 82) détermine donc mécaniquement l'incrément de ver
 
 ### 84 - Génération automatique du changelog et des releases
 
-Le workflow `.github/workflows/release.yml` lance **semantic-release** à chaque push sur `main`. Il analyse les Conventional Commits depuis le dernier tag, calcule la nouvelle version SemVer, met à jour `CHANGELOG.md`, crée le **tag Git** et publie une **GitHub Release** avec les notes de version.
+Le workflow `.github/workflows/release.yml` lance **semantic-release** à chaque push sur `main`. Il analyse les Conventional Commits depuis le dernier tag, calcule la nouvelle version SemVer, crée le **tag Git** et publie une **GitHub Release** dont les notes de version (changelog) sont générées automatiquement.
 
 ```yaml
 name: Release
@@ -1936,13 +1936,24 @@ jobs:
         with:
           fetch-depth: 0
       - uses: cycjimmy/semantic-release-action@16ca923e6ccbb50770c415a0ccd43709a8c5f7a4 # v4
-        with:
-          extra_plugins: |
-            @semantic-release/changelog
-            @semantic-release/git
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+La configuration des plugins est dans `.releaserc.json` :
+
+```json
+{
+  "branches": ["main"],
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    "@semantic-release/github"
+  ]
+}
+```
+
+> Le premier `feat:` fusionné sur `main` publie la version **1.0.0**. La release n'écrit pas de fichier dans le dépôt (pas de push du bot sur `main`), ce qui reste compatible avec la protection de branche de la tâche 80.
 
 ![Release générée automatiquement par semantic-release](screenshots/84-release.png)
 

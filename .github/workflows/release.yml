@@ -22,11 +22,8 @@ jobs:
         with:
           fetch-depth: 0
       - name: Generation du changelog et de la release
-        # Analyse les Conventional Commits (feat/fix/...) pour deduire la version SemVer
+        # Analyse les Conventional Commits (feat/fix/...) pour deduire la version SemVer,
+        # cree le tag Git et publie une GitHub Release (notes = changelog).
         uses: cycjimmy/semantic-release-action@16ca923e6ccbb50770c415a0ccd43709a8c5f7a4 # v4
-        with:
-          extra_plugins: |
-            @semantic-release/changelog
-            @semantic-release/git
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
