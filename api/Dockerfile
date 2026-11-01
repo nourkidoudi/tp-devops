@@ -1,30 +1,31 @@
-# Dockerfile de l'API Node.js / Express
-FROM node:22-alpine
+# Étape 1 : Builder
+FROM node:22-alpine AS builder
 WORKDIR /app
-
-# Prisma a besoin d'OpenSSL sur Alpine
 RUN apk add --no-cache openssl
+COPY package.json package-lock.json ./
+COPY prisma ./prisma/
+RUN npm ci
+RUN npx prisma generate
 
+# Étape 2 : Runner (Image finale ultra-légère)
+FROM node:22-alpine AS runner
+WORKDIR /app
+RUN apk add --no-cache openssl
 ENV NODE_ENV=production \
     PORT=3001
 
-# Dépendances d'abord : cette couche est réutilisée tant que package*.json ne change pas
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# On ne copie que le nécessaire pour l'exécution
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY . .
 
-# Code de l'API
-COPY --chown=node:node . .
+# Suppression des fichiers inutiles pour la prod (tests, etc.)
+RUN rm -rf tests
 
-# Génère le client Prisma à partir du schéma
-RUN npx prisma generate
-
-# L'utilisateur "node" est fourni par l'image : pas de droits root
 USER node
 EXPOSE 3001
 
-# Vérifie régulièrement que l'API répond
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s \
   CMD wget -qO- http://127.0.0.1:${PORT}/api/health || exit 1
 
-# Applique les migrations, puis démarre l'API
 CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
