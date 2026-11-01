@@ -1876,6 +1876,8 @@ Platforms:
   - linux/arm64
 ```
 
+![Build multi-architecture avec Docker Buildx](screenshots/89-buildx-multiarch.png)
+
 ## 18. Git Workflow
 
 ### 79 - Stratégie de branches : branch → Pull Request → review → merge
