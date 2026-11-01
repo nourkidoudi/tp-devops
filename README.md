@@ -104,7 +104,6 @@ Vérification depuis la machine physique : `http://192.168.237.130:8080`, avec i
 
 <img src="screenshots/jenkins-install.png" alt="Installation des plugins" width="600">
 <img src="screenshots/jenkins-status.png" alt="Service Jenkins" width="600">
-<img src="screenshots/jenkins.png" alt="Tableau de bord Jenkins" width="600">
 
 ---
 
@@ -1281,7 +1280,6 @@ curl -I http://localhost:3001/api/health
 
 ![Réponse 429](screenshots/rate-limit-429.png)
 
-### 52 - OWASP API Security Top 10 (2023)
 ### 52 - OWASP API Security Top 10 (2023)
 
 | Risque | Concerne notre API ? | Mesure en place ou prévue |
