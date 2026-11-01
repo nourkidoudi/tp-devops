@@ -89,31 +89,35 @@ jobs:
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3
       - name: Configuration de Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-      - name: Construction de l'image API (Multi-arch)
-        # Tache 72, 88 et 89 : build multi-architecture avec Buildx
+      - name: Construction de l'image API (pour scan)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ./api
-          platforms: linux/amd64,linux/arm64
-          push: false
+          load: true
           tags: devsecops-api:${{ github.sha }}
-      - name: Construction de l'image Portfolio (Multi-arch)
+      - name: Construction de l'image Portfolio (pour scan)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ./portfolio-next
-          platforms: linux/amd64,linux/arm64
-          push: false
+          load: true
           tags: devsecops-portfolio:${{ github.sha }}
       - name: Scan Trivy - image API
         # Tache 73 : scan de vulnerabilites de l'image, echec si CRITICAL
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        uses: aquasecurity/trivy-action@595030c2c652e3954f634517540999752636f11f # v0.24.0
         with:
           image-ref: devsecops-api:${{ github.sha }}
           severity: CRITICAL
           exit-code: '1'
       - name: Scan Trivy - image Portfolio
-        uses: aquasecurity/trivy-action@915b19bbe73b92a6cf82a1bc12b087c9a19a5fe2 # v0.28.0
+        uses: aquasecurity/trivy-action@595030c2c652e3954f634517540999752636f11f # v0.24.0
         with:
           image-ref: devsecops-portfolio:${{ github.sha }}
           severity: CRITICAL
           exit-code: '1'
+      - name: Validation Multi-architecture (amd64, arm64)
+        # Tache 88 et 89 : validation du build multi-arch
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./api
+          platforms: linux/amd64,linux/arm64
+          push: false
