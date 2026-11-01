@@ -8,10 +8,11 @@ on:
   pull_request:
     branches: [ main ]
 
-# Tache 76 : permissions minimales du GITHUB_TOKEN (lecture seule du depot).
-# Aucune permission d'ecriture n'est accordee au token : le strict necessaire.
+# Tache 76 : permissions minimales du GITHUB_TOKEN.
+# contents: read pour checkout, pull-requests: read pour Gitleaks/Semgrep sur les PR.
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -56,7 +57,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: SAST (Semgrep)
-        run: docker run --rm -v "$PWD:/src" semgrep/semgrep semgrep scan --config auto --error
+        # Etape 65 : Analyse SAST officielle. Plus robuste que le docker run manuel.
+        uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1
+        with:
+          config: >-
+            p/javascript
+            p/typescript
+            p/dockerfile
+            p/owasp-top-10
       - name: Installation de Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -95,13 +103,13 @@ jobs:
           tags: devsecops-portfolio:${{ github.sha }}
       - name: Scan Trivy - image API
         # Tache 73 : scan de vulnerabilites de l'image, echec si CRITICAL
-        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87 # master
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.29.0
         with:
           image-ref: devsecops-api:${{ github.sha }}
           severity: CRITICAL
           exit-code: '1'
       - name: Scan Trivy - image Portfolio
-        uses: aquasecurity/trivy-action@8f28faec26515256b6d22074d1d2a8986f4cbd87 # master
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.29.0
         with:
           image-ref: devsecops-portfolio:${{ github.sha }}
           severity: CRITICAL
