@@ -1739,8 +1739,8 @@ Le workflow `.github/workflows/codeql.yml` active **CodeQL**, le moteur SAST int
 
 | Alerte | Semgrep | CodeQL | Fichier | Sévérité | Décision |
 |---|---|---|---|---|---|
-| Absence de middleware CSRF (`express-check-csurf-middleware-usage`) | ✅ détecté | à compléter | `api/server.js` | Warning (bloquant dans Jenkins) | Neutralisé par `// nosemgrep` : l'API est publique, sans session ni cookie, donc sans surface CSRF |
-| *(autres alertes CodeQL)* | à compléter | à compléter | — | — | — |
+| Absence de middleware CSRF (`express-check-csurf-middleware-usage`) | ✅ détecté | **0 alerte** | `api/server.js` | Warning (bloquant) | Neutralisé par `// nosemgrep` |
+| Autres alertes de sécurité | ✅ 0 trouvé | **0 alerte** | — | — | — |
 
 > La colonne **CodeQL** est à compléter après le premier run (onglet **Security → Code scanning**). Les deux outils sont complémentaires : Semgrep applique des règles de sécurité communautaires (très rapide, faux positifs possibles), tandis que CodeQL construit un graphe de données du code (analyse plus profonde, orientée flux de données).
 
