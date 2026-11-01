@@ -103,13 +103,13 @@ jobs:
           tags: devsecops-portfolio:${{ github.sha }}
       - name: Scan Trivy - image API
         # Tache 73 : scan de vulnerabilites de l'image, echec si CRITICAL
-        uses: aquasecurity/trivy-action@595030c2c652e3954f634517540999752636f11f # v0.24.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: devsecops-api:${{ github.sha }}
           severity: CRITICAL
           exit-code: '1'
       - name: Scan Trivy - image Portfolio
-        uses: aquasecurity/trivy-action@595030c2c652e3954f634517540999752636f11f # v0.24.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: devsecops-portfolio:${{ github.sha }}
           severity: CRITICAL
