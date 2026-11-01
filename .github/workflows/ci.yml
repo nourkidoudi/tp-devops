@@ -102,18 +102,14 @@ jobs:
           load: true
           tags: devsecops-portfolio:${{ github.sha }}
       - name: Scan Trivy - image API
-        # Tache 73 : scan de vulnerabilites de l'image, echec si CRITICAL
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          image-ref: devsecops-api:${{ github.sha }}
-          severity: CRITICAL
-          exit-code: '1'
+        # Etape 73 : Scan via Docker pour eviter les bugs de l'action GitHub.
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasecurity/trivy:latest image --severity CRITICAL --exit-code 1 devsecops-api:${{ github.sha }}
       - name: Scan Trivy - image Portfolio
-        uses: aquasecurity/trivy-action@v0.28.0
-        with:
-          image-ref: devsecops-portfolio:${{ github.sha }}
-          severity: CRITICAL
-          exit-code: '1'
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasecurity/trivy:latest image --severity CRITICAL --exit-code 1 devsecops-portfolio:${{ github.sha }}
       - name: Validation Multi-architecture (amd64, arm64)
         # Tache 88 et 89 : validation du build multi-arch
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
