@@ -118,9 +118,8 @@ pipeline {
                 script {
                     echo "=== Construction des images Docker tag: ${env.GIT_SHA} ==="
                     // Construction des images avec le tag Git SHA et le tag latest
-                    // --cache-from reutilise les couches de l image precedente (build plus rapide)
-                    sh "docker build --cache-from devsecops-api:latest -t devsecops-api:${env.GIT_SHA} -t devsecops-api:latest ./api"
-                    sh "docker build --cache-from devsecops-portfolio:latest -t devsecops-portfolio:${env.GIT_SHA} -t devsecops-portfolio:latest ./portfolio-next"
+                    sh "docker build -t devsecops-api:${env.GIT_SHA} -t devsecops-api:latest ./api"
+                    sh "docker build -t devsecops-portfolio:${env.GIT_SHA} -t devsecops-portfolio:latest ./portfolio-next"
                     
                     echo '=== Images Docker generees ==='
                     sh 'docker images | grep devsecops'

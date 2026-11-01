@@ -1487,7 +1487,6 @@ devsecops-api          latest    9f8e7d6c5b4a   25 seconds ago   142MB
 
 ![Images taguées avec Git SHA](screenshots/63-jenkins-docker-sha.png)
 
-**Dépôt :** https://github.com/nourkidoudi/tp-devops
 
 ## 16. Pipeline DevSecOps Jenkins
 
@@ -1605,3 +1604,7 @@ Le pipeline est configuré pour **échouer** (`exit code 1`) dès qu'un secret e
 **Pipeline volontairement échoué** — Semgrep bloque le build à cause de l'absence de protection CSRF dans l'API :
 
 ![Pipeline DevSecOps échoué](screenshots/69-jenkins-fail.png)
+
+---
+
+**Dépôt :** https://github.com/nourkidoudi/tp-devops
