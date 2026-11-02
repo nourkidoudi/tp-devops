@@ -119,4 +119,48 @@ Le pipeline utilise `docker/setup-buildx-action` pour construire des images comp
 
 ---
 
+## 20. Registre privé Harbor
+
+### 90 - Installation de Harbor
+
+Harbor a été installé sur la VM Ubuntu (`192.168.237.130`) via Docker Compose. Il sert de registre privé pour stocker nos images Docker de manière sécurisée et centralisée.
+
+![Dashboard Harbor](screenshots/90-harbor-dashboard.png)
+
+### 91 - Publication des images dans Harbor
+
+Les images sont poussées vers Harbor avec le nommage suivant :
+- **API** : `192.168.237.130:8090/portfolio/devsecops-api:tag`
+- **Frontend** : `192.168.237.130:8090/portfolio/devsecops-portfolio:tag`
+
+![Images dans Harbor](screenshots/91-harbor-images.png)
+
+### 92 - RBAC et Robot Accounts
+
+L'accès est segmenté par projet. Un **Robot Account** a été créé spécifiquement pour le pipeline CI/CD, limitant les permissions à la publication (`push`) et à la lecture (`pull`) dans le projet `portfolio`.
+
+### 93 - Scan automatique et comparaison
+
+Harbor utilise Trivy pour scanner les images à chaque push.
+- **Comparaison** : Le scan Harbor est plus complet car il persiste l'historique des vulnérabilités et permet de bloquer le téléchargement d'images vulnérables au niveau du registre.
+
+![Scan de vulnérabilités Harbor](screenshots/93-harbor-scan.png)
+
+### 94 - Politique de rétention
+
+Une règle de rétention a été configurée pour ne conserver que les **5 dernières images** par dépôt, afin d'optimiser l'espace disque de la VM.
+
+![Politique de rétention Harbor](screenshots/94-harbor-retention.png)
+
+### 95 - Comparaison : GHCR vs Harbor
+
+| Critère | GitHub Container Registry (GHCR) | Harbor (Privé) |
+|---|---|---|
+| Hébergement | Cloud (SaaS) | Auto-hébergé (On-premise) |
+| Intégration | Native à GitHub Actions | Indépendant, via Docker Login |
+| Sécurité | Scan basique | Scan Trivy avancé + RBAC fin |
+| Coût | Gratuit (public) / Payant (privé) | Gratuit (Open Source) mais coût infra |
+
+---
+
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
