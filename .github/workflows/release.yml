@@ -24,6 +24,38 @@ jobs:
       - name: Generation du changelog et de la release
         # Analyse les Conventional Commits (feat/fix/...) pour deduire la version SemVer,
         # cree le tag Git et publie une GitHub Release (notes = changelog).
+        id: semantic
         uses: cycjimmy/semantic-release-action@16ca923e6ccbb50770c415a0ccd43709a8c5f7a4 # v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # Tache 98 : attacher automatiquement un SBOM (genere par Syft) a la
+      # release creee par semantic-release. Les etapes ne s'executent que si
+      # une nouvelle version a effectivement ete publiee.
+      # -----------------------------------------------------------------------
+      - name: Generation du SBOM de l'API (Syft)
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: ./api
+          format: spdx-json
+          output-file: sbom-api.spdx.json
+          upload-artifact: false
+
+      - name: Generation du SBOM du Portfolio (Syft)
+        if: steps.semantic.outputs.new_release_published == 'true'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: ./portfolio-next
+          format: spdx-json
+          output-file: sbom-portfolio.spdx.json
+          upload-artifact: false
+
+      - name: Publication des SBOM comme assets de la release
+        if: steps.semantic.outputs.new_release_published == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "v${{ steps.semantic.outputs.new_release_version }}" \
+            sbom-api.spdx.json sbom-portfolio.spdx.json --clobber

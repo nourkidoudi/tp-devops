@@ -163,4 +163,168 @@ Une règle de rétention a été configurée pour ne conserver que les **5 derni
 
 ---
 
+## 21. Software Supply Chain Security
+
+Le workflow `.github/workflows/supply-chain.yml` sécurise la chaîne d'approvisionnement logicielle : SBOM, signature des images, attestation de provenance et politique de refus des images non signées. Les images sont publiées sur **GitHub Container Registry** (`ghcr.io/nourkidoudi/tp-devops/...`), seul registre accessible depuis les runners GitHub hébergés (contrairement à Harbor, hébergé sur la VM locale).
+
+### 96 - Génération automatique d'un SBOM avec Syft
+
+À chaque push sur `main`, les deux images sont construites, publiées sur GHCR puis analysées par **Syft** (`anchore/sbom-action`) qui produit un SBOM au format **SPDX-JSON** :
+
+- `sbom-api.spdx.json` — image `ghcr.io/nourkidoudi/tp-devops/api`
+- `sbom-portfolio.spdx.json` — image `ghcr.io/nourkidoudi/tp-devops/portfolio`
+
+Un SBOM (*Software Bill of Materials*) est l'inventaire exhaustif des composants d'un artefact (bibliothèques, versions, licences, empreintes). C'est la base de toute réponse à incident : savoir en quelques secondes si une CVE nouvellement publiée nous concerne.
+
+### 97 - Conservation du SBOM comme artefact du pipeline
+
+Les deux fichiers SPDX sont conservés 30 jours comme **artefact du run** GitHub Actions (`actions/upload-artifact`, nom d'artefact `sbom`). Ils sont téléchargeables depuis la page du run, onglet **Artifacts**.
+
+### 98 - Attachement automatique du SBOM à chaque release
+
+Le workflow `.github/workflows/release.yml` attache automatiquement les SBOM comme **assets de la GitHub Release** dès que `semantic-release` publie une nouvelle version :
+
+```yaml
+- name: Generation du SBOM de l'API (Syft)
+  if: steps.semantic.outputs.new_release_published == 'true'
+  uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+  with:
+    path: ./api
+    format: spdx-json
+    output-file: sbom-api.spdx.json
+
+- name: Publication des SBOM comme assets de la release
+  run: gh release upload "v${{ steps.semantic.outputs.new_release_version }}" sbom-api.spdx.json sbom-portfolio.spdx.json --clobber
+```
+
+Chaque release embarque donc son propre inventaire de composants, archivé au même endroit que le code.
+
+### 99 - Signature des images avec Sigstore / Cosign
+
+Les images publiées sur le registre sont signées **sans clé** (*keyless*) : Cosign utilise le jeton **OIDC** du workflow GitHub Actions pour obtenir un certificat éphémère auprès de **Fulcio**, et enregistre la preuve dans le journal d'audit public **Rekor**. Aucune clé privée n'est à stocker — c'est l'identité du workflow (`supply-chain.yml` du dépôt) qui est attestée.
+
+```yaml
+permissions:
+  id-token: write   # requis pour la signature keyless
+  packages: write
+...
+- name: Signature keyless des deux images
+  run: |
+    cosign sign --yes ghcr.io/nourkidoudi/tp-devops/api@${{ steps.build_api.outputs.digest }}
+```
+
+### 100 - Vérification de la signature avec `cosign verify`
+
+**Commande :**
+
+```bash
+cosign verify \
+  --certificate-identity-regexp "^https://github.com/nourkidoudi/tp-devops/.github/workflows/supply-chain.yml@.*$" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/nourkidoudi/tp-devops/api:latest
+```
+
+**Résultat attendu :**
+
+```text
+Verification for ghcr.io/nourkidoudi/tp-devops/api:latest --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The code-signing certificate was verified using trusted certificate authority certificates
+
+[{"critical":{"identity":{"docker-reference":"ghcr.io/nourkidoudi/tp-devops/api"},"image":{"docker-manifest-digest":"sha256:..."},"type":"cosign container image signature"},"optional":null}]
+```
+
+La vérification est intégrée au pipeline (étape *Verification de la signature*), donc une image non signée fait échouer la CI.
+
+### 101 - Attestations de build dans GitHub Actions
+
+`actions/attest-build-provenance` génère une **attestation de provenance** signée (norme in-toto), poussée dans le registre à côté de l'image :
+
+```yaml
+- name: Attestation de provenance de l'image API
+  uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+  with:
+    subject-name: ghcr.io/nourkidoudi/tp-devops/api
+    subject-digest: ${{ steps.build_api.outputs.digest }}
+    push-to-registry: true
+```
+
+### 102 - Provenance des artefacts
+
+La **provenance** répond à la question : *« d'où vient cet artefact et comment a-t-il été fabriqué ? »*. Elle décrit, de façon vérifiable cryptographiquement : le dépôt source, le commit exact, le workflow et le job qui ont produit l'image, ainsi que le digest résultant. Elle est signée par l'identité du build (ici le workflow GitHub Actions), ce qui la rend infalsifiable : personne ne peut prétendre avoir construit une image qu'il n'a pas construite.
+
+**Vérification de la provenance d'une image :**
+
+```bash
+gh attestation verify oci://ghcr.io/nourkidoudi/tp-devops/api:latest --repo nourkidoudi/tp-devops
+```
+
+```text
+Loaded digest sha256:... for oci://ghcr.io/nourkidoudi/tp-devops/api:latest
+Loaded 1 attestation from GitHub API
+✓ Verification succeeded!
+
+sha256:... was attested by:
+REPO                        PREDICATE_TYPE                  WORKFLOW
+nourkidoudi/tp-devops       https://slsa.dev/provenance/v1  .github/workflows/supply-chain.yml@refs/heads/main
+```
+
+### 103 - Principes SLSA et in-toto
+
+**in-toto** est le cadre de référence : il définit comment décrire et signer chaque étape d'une chaîne de production logicielle (attestations liées entre elles par les digests des artefacts).
+
+**SLSA** (*Supply-chain Levels for Software Artifacts*) est l'échelle de maturité qui s'appuie sur ces attestations :
+
+| Niveau | Exigence principale |
+|---|---|
+| SLSA 1 | Provenance documentée (non signée) |
+| SLSA 2 | Build hébergé + provenance **signée** par la plateforme de build |
+| SLSA 3 | Build isolé et durci, provenance non falsifiable par le projet |
+
+**Situation de notre pipeline : SLSA niveau 2, avec plusieurs exigences du niveau 3 déjà remplies.**
+
+- ✅ Build hébergé et isolé par runner GitHub Actions qui ne persiste pas entre les jobs.
+- ✅ Provenance **signée** automatiquement (`actions/attest-build-provenance`).
+- ✅ Dépendances tierces épinglées par SHA de commit (tâche 77) et images signées (tâche 99).
+- ➖ Limite connue : les workflows tournent encore sur des runners hébergés *partagés* (`ubuntu-latest`), ce qui empêche la revendication stricte du niveau 3 (réservé aux runners dédiés/durcis).
+
+### 104 - Refus d'une image non signée
+
+Le job **`Politique - refus des images non signees`** s'exécute après le build : il rejoue `cosign verify` sur chaque image et **échoue** (donc bloque toute livraison) si la signature est absente ou invalide. C'est le point de contrôle obligatoire avant utilisation d'une image.
+
+```bash
+for image in api portfolio; do
+  cosign verify \
+    --certificate-identity-regexp "^https://github.com/nourkidoudi/tp-devops/.github/workflows/supply-chain.yml@.*$" \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+    ghcr.io/nourkidoudi/tp-devops/${image}:${GITHUB_SHA} > /dev/null
+done
+```
+
+### 105 - Simulation d'une attaque de supply chain
+
+Le job **`Simulation - attaque supply chain bloquee`** reproduit le scénario d'une substitution d'image : un attaquant (ou une dépendance compromise) tente de faire consommer une image **tierce non signée** (`docker.io/library/alpine:3.19`) à la place d'une image légitime.
+
+**Scénario :**
+
+1. L'image `docker.io/library/alpine:3.19` n'a **aucune** signature Cosign.
+2. Le pipeline applique sa politique : `cosign verify` avec l'identité de confiance attendue.
+3. La vérification échoue → le script détecte un **code de sortie non nul**, considère l'image comme non fiable et **bloque la livraison**.
+4. Si l'image avait été acceptée, le job sortirait volontairement en erreur (`exit 1`) pour signaler une chaîne compromise.
+
+**Blocage obtenu :**
+
+```text
+Attaque simulee : substitution d'une image signee par une image tierce non signee.
+Image utilisee pour la simulation : docker.io/library/alpine:3.19
+Error: no matching signatures: ...
+Resultat : code de sortie 1 -> image non signee REFUSEE, livraison bloquee.
+```
+
+Ce contrôle transforme la signature Cosign d'un simple « bonus » en **barrière effective** : un artefact non signé, ou signé par une identité différente de celle du workflow officiel, ne peut pas franchir le pipeline.
+
+---
+
 **Dépôt :** https://github.com/nourkidoudi/tp-devops

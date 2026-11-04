@@ -1,0 +1,184 @@
+# Partie 21 - Software Supply Chain Security
+# Taches 96 a 105 : SBOM (Syft), signature (Cosign / Sigstore), attestation de
+# provenance, politique de refus des images non signees et simulation d'attaque.
+name: Supply Chain Security
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Tache 76 : permissions minimales au niveau du workflow.
+# Les permissions elevees sont accordees individuellement, job par job.
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Taches 96, 97, 99, 100, 101 : SBOM, artefact, signature et provenance
+  # ---------------------------------------------------------------------------
+  sbom-sign-attest:
+    name: SBOM, signature et attestation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write      # publier les images sur GHCR
+      id-token: write      # signature keyless (OIDC) + attestation
+      attestations: write  # ecrire l'attestation de provenance
+    steps:
+      - name: Recuperation du depot
+        # Tache 77 : actions tierces epinglees sur un SHA de commit immuable
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Configuration de QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3
+
+      - name: Configuration de Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Connexion a GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construction et publication de l'image API
+        id: build_api
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./api
+          push: true
+          tags: ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+
+      - name: Construction et publication de l'image Portfolio
+        id: build_portfolio
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./portfolio-next
+          push: true
+          tags: ghcr.io/${{ github.repository }}/portfolio:${{ github.sha }}
+
+      # --- Tache 96 : generation du SBOM avec Syft ------------------------
+      - name: Generation du SBOM de l'image API (Syft)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ghcr.io/${{ github.repository }}/api@${{ steps.build_api.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-api.spdx.json
+          upload-artifact: false
+
+      - name: Generation du SBOM de l'image Portfolio (Syft)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ghcr.io/${{ github.repository }}/portfolio@${{ steps.build_portfolio.outputs.digest }}
+          format: spdx-json
+          output-file: sbom-portfolio.spdx.json
+          upload-artifact: false
+
+      # --- Tache 97 : conservation du SBOM comme artefact du pipeline -----
+      - name: Conservation des SBOM comme artefacts du pipeline
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom
+          path: sbom-*.spdx.json
+          retention-days: 30
+
+      # --- Tache 99 : signature des images avec Cosign --------------------
+      - name: Installation de Cosign (Sigstore)
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Signature keyless des deux images
+        run: |
+          cosign sign --yes ghcr.io/${{ github.repository }}/api@${{ steps.build_api.outputs.digest }}
+          cosign sign --yes ghcr.io/${{ github.repository }}/portfolio@${{ steps.build_portfolio.outputs.digest }}
+
+      # --- Tache 100 : verification de la signature -----------------------
+      - name: Verification de la signature (cosign verify)
+        run: |
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@.*$" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            ghcr.io/${{ github.repository }}/api@${{ steps.build_api.outputs.digest }}
+
+      # --- Tache 101 : attestation de provenance --------------------------
+      - name: Attestation de provenance de l'image API
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/api
+          subject-digest: ${{ steps.build_api.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attestation de provenance de l'image Portfolio
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/portfolio
+          subject-digest: ${{ steps.build_portfolio.outputs.digest }}
+          push-to-registry: true
+
+      # --- Tache 102 : verification de la provenance ----------------------
+      - name: Verification de la provenance (gh attestation verify)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh attestation verify \
+            oci://ghcr.io/${{ github.repository }}/api@${{ steps.build_api.outputs.digest }} \
+            --repo ${{ github.repository }}
+
+  # ---------------------------------------------------------------------------
+  # Tache 104 : refuser une image non signee avant toute utilisation
+  # ---------------------------------------------------------------------------
+  policy-gate:
+    name: Politique - refus des images non signees
+    needs: sbom-sign-attest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    steps:
+      - name: Installation de Cosign (Sigstore)
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Verification obligatoire de la signature avant utilisation
+        run: |
+          for image in api portfolio; do
+            echo "Verification de la signature de ghcr.io/${{ github.repository }}/${image}:${{ github.sha }}"
+            cosign verify \
+              --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@.*$" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              ghcr.io/${{ github.repository }}/${image}:${{ github.sha }} > /dev/null
+          done
+          echo "Les deux images sont signees : deploiement autorise."
+
+  # ---------------------------------------------------------------------------
+  # Tache 105 : simulation d'une attaque de supply chain
+  # ---------------------------------------------------------------------------
+  simulate-supply-chain-attack:
+    name: Simulation - attaque supply chain bloquee
+    needs: sbom-sign-attest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Installation de Cosign (Sigstore)
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Scenario - une image tierce non signee doit etre refusee
+        run: |
+          echo "Attaque simulee : substitution d'une image signee par une image tierce non signee."
+          echo "Image utilisee pour la simulation : docker.io/library/alpine:3.19"
+          echo "La politique du pipeline doit refuser cette image."
+          set +e
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@.*$" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            docker.io/library/alpine:3.19
+          code=$?
+          set -e
+          if [ "$code" -eq 0 ]; then
+            echo "::error::L'image non signee a ete ACCEPTEE : la chaine d'approvisionnement est compromise."
+            exit 1
+          fi
+          echo "Resultat : code de sortie ${code} -> image non signee REFUSEE, livraison bloquee."
