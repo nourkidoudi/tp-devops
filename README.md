@@ -180,6 +180,8 @@ Un SBOM (*Software Bill of Materials*) est l'inventaire exhaustif des composants
 
 Les deux fichiers SPDX sont conservés 30 jours comme **artefact du run** GitHub Actions (`actions/upload-artifact`, nom d'artefact `sbom`). Ils sont téléchargeables depuis la page du run, onglet **Artifacts**.
 
+![Artefact SBOM généré et conservé dans GitHub Actions](screenshots/96-sbom-artifact.png)
+
 ### 98 - Attachement automatique du SBOM à chaque release
 
 Le workflow `.github/workflows/release.yml` attache automatiquement les SBOM comme **assets de la GitHub Release** dès que `semantic-release` publie une nouvelle version :
@@ -199,6 +201,8 @@ Le workflow `.github/workflows/release.yml` attache automatiquement les SBOM com
 
 Chaque release embarque donc son propre inventaire de composants, archivé au même endroit que le code.
 
+![SBOM attachés en tant qu'assets de la release](screenshots/98-release-sbom.png)
+
 ### 99 - Signature des images avec Sigstore / Cosign
 
 Les images publiées sur le registre sont signées **sans clé** (*keyless*) : Cosign utilise le jeton **OIDC** du workflow GitHub Actions pour obtenir un certificat éphémère auprès de **Fulcio**, et enregistre la preuve dans le journal d'audit public **Rekor**. Aucune clé privée n'est à stocker — c'est l'identité du workflow (`supply-chain.yml` du dépôt) qui est attestée.
@@ -212,6 +216,8 @@ permissions:
   run: |
     cosign sign --yes ghcr.io/nourkidoudi/tp-devops/api@${{ steps.build_api.outputs.digest }}
 ```
+
+![Signature keyless des images avec Cosign et Fulcio](screenshots/99-cosign-sign.png)
 
 ### 100 - Vérification de la signature avec `cosign verify`
 
@@ -238,6 +244,8 @@ The following checks were performed on each of these signatures:
 
 La vérification est intégrée au pipeline (étape *Verification de la signature*), donc une image non signée fait échouer la CI.
 
+![Vérification de la signature avec cosign verify](screenshots/100-cosign-verify.png)
+
 ### 101 - Attestations de build dans GitHub Actions
 
 `actions/attest-build-provenance` génère une **attestation de provenance** signée (norme in-toto), poussée dans le registre à côté de l'image :
@@ -250,6 +258,8 @@ La vérification est intégrée au pipeline (étape *Verification de la signatur
     subject-digest: ${{ steps.build_api.outputs.digest }}
     push-to-registry: true
 ```
+
+![Génération des attestations de build dans GitHub Actions](screenshots/101-attestation.png)
 
 ### 102 - Provenance des artefacts
 
@@ -270,6 +280,8 @@ sha256:... was attested by:
 REPO                        PREDICATE_TYPE                  WORKFLOW
 nourkidoudi/tp-devops       https://slsa.dev/provenance/v1  .github/workflows/supply-chain.yml@refs/heads/main
 ```
+
+![Vérification de la provenance avec gh attestation verify](screenshots/102-provenance-verify.png)
 
 ### 103 - Principes SLSA et in-toto
 
@@ -303,6 +315,8 @@ for image in api portfolio; do
 done
 ```
 
+![Politique de refus des images non signées](screenshots/104-blocage.png)
+
 ### 105 - Simulation d'une attaque de supply chain
 
 Le job **`Simulation - attaque supply chain bloquee`** reproduit le scénario d'une substitution d'image : un attaquant (ou une dépendance compromise) tente de faire consommer une image **tierce non signée** (`docker.io/library/alpine:3.19`) à la place d'une image légitime.
@@ -324,6 +338,8 @@ Resultat : code de sortie 1 -> image non signee REFUSEE, livraison bloquee.
 ```
 
 Ce contrôle transforme la signature Cosign d'un simple « bonus » en **barrière effective** : un artefact non signé, ou signé par une identité différente de celle du workflow officiel, ne peut pas franchir le pipeline.
+
+![Simulation d'une attaque de supply chain et blocage effectif](screenshots/105-blocage.png)
 
 ---
 
