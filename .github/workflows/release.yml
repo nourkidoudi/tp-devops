@@ -25,7 +25,7 @@ jobs:
         # Analyse les Conventional Commits (feat/fix/...) pour deduire la version SemVer,
         # cree le tag Git et publie une GitHub Release (notes = changelog).
         id: semantic
-        uses: cycjimmy/semantic-release-action@16ca923e6ccbb50770c415a0ccd43709a8c5f7a4 # v4
+        uses: cycjimmy/semantic-release-action@ad51787758d9654d5a75150a89a6fa9b3ccef95e # v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
