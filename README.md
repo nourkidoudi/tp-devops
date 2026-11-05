@@ -2247,4 +2247,174 @@ Le workflow CI `.github/workflows/ci.yml` exécute les tests d'intégration clou
 
 ---
 
+## 23. Introduction à Terraform
+
+**Terraform** est l'outil d'Infrastructure as Code (IaC) de référence développé par HashiCorp. Il permet de provisionner, déclarer et gérer l'ensemble des ressources cloud de manière reproductible et automatisée. Dans ce projet, le provider AWS est configuré pour communiquer directement avec notre émulateur local **Floci** (`http://localhost:4566`).
+
+### 118 - Installation et vérification de Terraform
+
+Installation de Terraform sous Windows et vérification de la version installée :
+
+```bash
+terraform version
+```
+
+![Vérification de l'installation de Terraform](screenshots/118-terraform-version.png)
+
+### 119 - Structure du projet Terraform
+
+Le dossier `terraform/` contient les 4 fichiers modulaires structurant le projet :
+
+* `providers.tf` : configuration du provider AWS pointant vers les endpoints Floci locaux.
+* `variables.tf` : définition des variables (`aws_region`, `floci_endpoint`, `environment`).
+* `main.tf` : déclaration déclarative des ressources cloud (S3, SQS, DynamoDB).
+* `outputs.tf` : valeurs exposées en sortie (noms et URLs des ressources créées).
+
+**Configuration du provider (`providers.tf`) :**
+
+```hcl
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region                      = var.aws_region
+  access_key                  = "test"
+  secret_key                  = "test"
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+  s3_use_path_style           = true
+
+  endpoints {
+    s3       = var.floci_endpoint
+    sqs      = var.floci_endpoint
+    dynamodb = var.floci_endpoint
+  }
+}
+```
+
+### 120 - Cycle de validation et planification (init, fmt, validate, plan)
+
+Exécution des commandes préparatoires :
+
+```bash
+terraform init      # Téléchargement du provider AWS
+terraform fmt       # Formatage canonique du code HCL
+terraform validate  # Validation syntaxique et sémantique
+terraform plan      # Calcul du plan d'exécution prévisionnel
+```
+
+**Résultat de `terraform plan` :**
+
+```text
+Plan: 3 to add, 0 to change, 0 to destroy.
+```
+
+![Résultat du plan d'exécution terraform plan](screenshots/120-terraform-plan.png)
+
+### 121 - Provisionnement automatique des ressources dans Floci (`terraform apply`)
+
+Application du plan et création des 3 composants d'infrastructure dans Floci (S3, SQS, DynamoDB) :
+
+```bash
+terraform apply -auto-approve
+```
+
+**Fichier de ressources (`main.tf`) :**
+
+```hcl
+# 1. Bucket S3
+resource "aws_s3_bucket" "portfolio_bucket" {
+  bucket = "tf-portfolio-bucket-${var.environment}"
+
+  tags = {
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+# 2. File SQS
+resource "aws_sqs_queue" "portfolio_queue" {
+  name                      = "tf-portfolio-queue-${var.environment}"
+  message_retention_seconds = 86400
+
+  tags = {
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+
+# 3. Table DynamoDB
+resource "aws_dynamodb_table" "portfolio_contacts" {
+  name         = "tf-portfolio-contacts-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+
+  tags = {
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
+}
+```
+
+**Résultat :**
+
+```text
+Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
+
+Outputs:
+dynamodb_table_name = "tf-portfolio-contacts-dev"
+s3_bucket_name = "tf-portfolio-bucket-dev"
+sqs_queue_url = "http://localhost:4566/000000000000/tf-portfolio-queue-dev"
+```
+
+![Application et création des ressources avec terraform apply](screenshots/121-terraform-apply.png)
+
+### 122 - Vérification des ressources via l'AWS CLI
+
+Contrôle indépendant avec l'AWS CLI pour confirmer la présence des ressources gérées par Terraform dans Floci :
+
+```bash
+aws --profile floci --endpoint-url http://localhost:4566 s3 ls
+aws --profile floci --endpoint-url http://localhost:4566 sqs list-queues
+aws --profile floci --endpoint-url http://localhost:4566 dynamodb list-tables
+```
+
+![Vérification des ressources Terraform avec AWS CLI](screenshots/122-terraform-verify.png)
+
+### 123 - Destruction propre des ressources (`terraform destroy`)
+
+Destruction complète et automatisée des ressources pour libérer l'environnement :
+
+```bash
+terraform destroy -auto-approve
+```
+
+**Résultat :**
+
+```text
+aws_s3_bucket.portfolio_bucket: Destroying...
+aws_sqs_queue.portfolio_queue: Destroying...
+aws_dynamodb_table.portfolio_contacts: Destroying...
+aws_s3_bucket.portfolio_bucket: Destruction complete after 0s
+aws_sqs_queue.portfolio_queue: Destruction complete after 0s
+aws_dynamodb_table.portfolio_contacts: Destruction complete after 0s
+
+Destroy complete! Resources: 3 destroyed.
+```
+
+---
+
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
