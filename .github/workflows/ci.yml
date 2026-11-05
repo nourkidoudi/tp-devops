@@ -1,5 +1,6 @@
 # Partie 17 - GitHub Actions : pipeline CI DevSecOps
 # Taches 70 a 73, 76 et 77
+# Tache 116 : Floci comme service container pour les tests d'integration sans compte AWS
 name: CI DevSecOps
 
 on:
@@ -116,3 +117,51 @@ jobs:
           context: ./api
           platforms: linux/amd64,linux/arm64
           push: false
+
+  # ---------------------------------------------------------------------------
+  # Tache 116 : tests d'integration avec Floci comme service container
+  # Permet d'executer les tests sans compte AWS reel
+  # ---------------------------------------------------------------------------
+  integration-aws:
+    name: Tests integration AWS (Floci)
+    runs-on: ubuntu-latest
+    services:
+      floci:
+        image: floci/floci
+        ports:
+          - 4566:4566
+    steps:
+      - name: Recuperation du depot
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Installation de Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Attente de Floci
+        run: |
+          for i in $(seq 1 30); do
+            curl -s http://localhost:4566/ && echo "Floci pret" && break
+            echo "Attente Floci... $i/30"
+            sleep 2
+          done
+      - name: Configuration AWS CLI (profil floci)
+        run: |
+          aws configure set aws_access_key_id test --profile floci
+          aws configure set aws_secret_access_key test --profile floci
+          aws configure set region us-east-1 --profile floci
+      - name: Creation bucket S3 et file SQS de test
+        run: |
+          aws --profile floci --endpoint-url http://localhost:4566 s3 mb s3://portfolio-bucket
+          aws --profile floci --endpoint-url http://localhost:4566 sqs create-queue --queue-name portfolio-queue
+      - name: Execution du test d'integration API Express -> Floci SQS
+        working-directory: api
+        env:
+          SQS_ENDPOINT: http://localhost:4566
+          SQS_QUEUE_URL: http://localhost:4566/000000000000/portfolio-queue
+          AWS_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+        run: |
+          npm ci --no-audit --no-fund
+          node ../floci/test-contact-sqs.js
+

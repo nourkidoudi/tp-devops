@@ -343,4 +343,307 @@ Ce contrôle transforme la signature Cosign d'un simple « bonus » en **barriè
 
 ---
 
+## 22. Émulation Cloud Locale avec Floci (AWS Local)
+
+**Floci** est un émulateur léger, open source et performant des services cloud Amazon Web Services (AWS). Il permet de tester et développer des architectures cloud (S3, SQS, DynamoDB, Lambda, Secrets Manager) en local et en CI sans disposer de compte AWS et sans coût.
+
+### 106 - Installation et démarrage de Floci sous Docker
+
+Floci est déployé en conteneur Docker en montant le socket Docker pour permettre l'exécution des fonctions Lambda :
+
+```bash
+docker run -d --name floci -p 4566:4566 -v //var/run/docker.sock:/var/run/docker.sock floci/floci
+```
+
+**Vérification de l'état du conteneur avec `docker ps` :**
+
+```text
+CONTAINER ID   IMAGE         COMMAND                  CREATED          STATUS                    PORTS                                         NAMES
+9d2b772f23fd   floci/floci   "/usr/local/bin/dock…"   13 seconds ago   Up 12 seconds (healthy)   0.0.0.0:4566->4566/tcp, [::]:4566->4566/tcp   floci
+```
+
+![Démarrage du conteneur Floci et vérification avec docker ps](screenshots/106-floci-docker-ps.png)
+
+![Interface web et console locale de Floci (Dashboard)](screenshots/106-floci-dashboard.png)
+
+### 107 - Configuration de l'AWS CLI (Profil floci)
+
+Configuration d'un profil dédié `floci` dans l'AWS CLI avec des identifiants fictifs pointant vers le endpoint local `http://localhost:4566` :
+
+```bash
+aws configure set aws_access_key_id test --profile floci
+aws configure set aws_secret_access_key test --profile floci
+aws configure set region us-east-1 --profile floci
+aws configure set output json --profile floci
+
+aws --profile floci --endpoint-url http://localhost:4566 sts get-caller-identity
+```
+
+**Résultat :**
+
+```json
+{
+    "UserId": "000000000000",
+    "Account": "000000000000",
+    "Arn": "arn:aws:iam::000000000000:root"
+}
+```
+
+![Configuration AWS CLI et test sts get-caller-identity](screenshots/107-floci-sts.png)
+
+### 108 - Création d'un bucket S3 local
+
+```bash
+aws --profile floci --endpoint-url http://localhost:4566 s3 mb s3://portfolio-bucket
+aws --profile floci --endpoint-url http://localhost:4566 s3 ls
+```
+
+**Résultat :**
+
+```text
+make_bucket: portfolio-bucket
+2026-11-05 18:29:28 portfolio-bucket
+```
+
+![Création du bucket S3 local et listing](screenshots/108-floci-s3-bucket.png)
+
+### 109 - Upload et téléchargement d'un objet S3
+
+```bash
+echo "Fichier test Floci S3 DevSecOps" > test-s3.txt
+aws --profile floci --endpoint-url http://localhost:4566 s3 cp test-s3.txt s3://portfolio-bucket/test-s3.txt
+aws --profile floci --endpoint-url http://localhost:4566 s3 cp s3://portfolio-bucket/test-s3.txt test-s3-recupere.txt
+cat test-s3-recupere.txt
+```
+
+**Résultat :**
+
+```text
+upload: ./test-s3.txt to s3://portfolio-bucket/test-s3.txt
+download: s3://portfolio-bucket/test-s3.txt to ./test-s3-recupere.txt
+Fichier test Floci S3 DevSecOps
+```
+
+![Envoi et récupération d'un fichier dans S3](screenshots/109-floci-s3-transfer.png)
+
+### 110 - File de messages SQS locale
+
+Création d'une file SQS `portfolio-queue`, publication d'un message de notification et consommation du message :
+
+```bash
+aws --profile floci --endpoint-url http://localhost:4566 sqs create-queue --queue-name portfolio-queue
+
+aws --profile floci --endpoint-url http://localhost:4566 sqs send-message \
+  --queue-url http://localhost:4566/000000000000/portfolio-queue \
+  --message-body "Test message contact DevSecOps via SQS Floci"
+
+aws --profile floci --endpoint-url http://localhost:4566 sqs receive-message \
+  --queue-url http://localhost:4566/000000000000/portfolio-queue
+```
+
+**Résultat :**
+
+```json
+{
+    "Messages": [
+        {
+            "MessageId": "4a9b589d-5cba-4ac8-a38a-adf2b571eb7a",
+            "ReceiptHandle": "region=us-east-1:account=000000000000:queue=portfolio-queue:...",
+            "MD5OfBody": "7e40931be290865a44785f3ba2d3741d",
+            "Body": "Test message contact DevSecOps via SQS Floci"
+        }
+    ]
+}
+```
+
+![Création de file SQS, envoi et lecture du message](screenshots/110-floci-sqs.png)
+
+### 111 - Table NoSQL DynamoDB locale
+
+Création d'une table `portfolio-contacts` en mode `PAY_PER_REQUEST`, insertion d'un contact et lecture par clé primaire :
+
+```bash
+aws --profile floci --endpoint-url http://localhost:4566 dynamodb create-table \
+    --table-name portfolio-contacts \
+    --attribute-definitions AttributeName=id,AttributeType=S \
+    --key-schema AttributeName=id,KeyType=HASH \
+    --billing-mode PAY_PER_REQUEST
+
+aws --profile floci --endpoint-url http://localhost:4566 dynamodb put-item \
+    --table-name portfolio-contacts \
+    --item '{"id": {"S": "contact-1"}, "name": {"S": "Nour Kidoudi"}, "email": {"S": "nour@example.com"}, "message": {"S": "Hello from DynamoDB Floci"}}'
+
+aws --profile floci --endpoint-url http://localhost:4566 dynamodb get-item \
+    --table-name portfolio-contacts \
+    --key '{"id": {"S": "contact-1"}}'
+```
+
+**Résultat :**
+
+```json
+{
+    "Item": {
+        "id": { "S": "contact-1" },
+        "name": { "S": "Nour Kidoudi" },
+        "email": { "S": "nour@example.com" },
+        "message": { "S": "Hello from DynamoDB Floci" }
+    }
+}
+```
+
+![Création table DynamoDB, insertion et lecture d'un item](screenshots/111-floci-dynamodb.png)
+
+### 112 - Fonction Serverless Lambda (Node.js)
+
+Déploiement d'une fonction Lambda `hello-devops` packagée en archive zip et invocation avec payload JSON :
+
+```bash
+aws --profile floci --endpoint-url http://localhost:4566 lambda create-function \
+    --function-name hello-devops \
+    --runtime nodejs18.x \
+    --role arn:aws:iam::000000000000:role/lambda-role \
+    --handler handler.handler \
+    --zip-file fileb://floci/lambda/function.zip
+
+aws --profile floci --endpoint-url http://localhost:4566 lambda invoke \
+    --function-name hello-devops \
+    --payload '{"name": "Nour"}' \
+    --cli-binary-format raw-in-base64-out \
+    response.json
+```
+
+**Résultat retourné (`response.json`) :**
+
+```json
+{
+    "statusCode": 200,
+    "body": "{\"message\":\"Bonjour Nour depuis Lambda locale (LocalStack) !\",\"timestamp\":\"2026-11-05T17:33:45.604Z\"}"
+}
+```
+
+![Création et exécution d'une fonction Lambda sous Floci](screenshots/112-floci-lambda.png)
+
+### 113 - Stockage de secrets avec Secrets Manager
+
+Gestion locale des identifiants et clés secrètes :
+
+```bash
+aws --profile floci --endpoint-url http://localhost:4566 secretsmanager create-secret \
+    --name portfolio/db-credentials \
+    --secret-string '{"username":"devsecops_admin","password":"Sup3rS3cr3tP@ssw0rd!"}'
+
+aws --profile floci --endpoint-url http://localhost:4566 secretsmanager get-secret-value \
+    --secret-id portfolio/db-credentials
+```
+
+**Résultat :**
+
+```json
+{
+    "ARN": "arn:aws:secretsmanager:us-east-1:000000000000:secret:portfolio/db-credentials-...",
+    "Name": "portfolio/db-credentials",
+    "SecretString": "{\"username\":\"devsecops_admin\",\"password\":\"Sup3rS3cr3tP@ssw0rd!\"}",
+    "VersionStages": ["AWSCURRENT"]
+}
+```
+
+![Création et lecture de secret dans Secrets Manager](screenshots/113-floci-secretsmanager.png)
+
+### 114 - Communication API Express ↔ Service Floci (Architecture hybride)
+
+Lors de la soumission du formulaire de contact via `POST /api/contact`, l'API Express enregistre la donnée dans PostgreSQL et publie immédiatement une notification d'événement dans la file **SQS Floci locale** pour un traitement asynchrone (ex: envoi d'email, indexation).
+
+**Schéma d'architecture :**
+
+```mermaid
+flowchart LR
+    User[Client / Frontend] -->|POST /api/contact| Express[API Express]
+    Express -->|Prisma ORM| PG[(PostgreSQL)]
+    Express -->|AWS SDK SQS| FlociSQS[Floci SQS<br/>portfolio-queue]
+    FlociSQS -.->|Polling / Trigger| Worker[Worker / Lambda]
+```
+
+**Résultat du test d'intégration :**
+
+```text
+=== Test de communication Express -> Floci SQS ===
+1. Envoi d'une requete POST /api/contact...
+Reponse HTTP API : 201 { success: true, message: 'Message reçu, merci !', id: 7 }
+2. Lecture du message dans la file SQS locale (Floci)...
+Succes ! Message(s) recupere(s) depuis SQS :
+[Message 1] ID: 8a213d02-e205-40c9-871d-e9cdde926ed1
+Corps: {"type":"new_contact","timestamp":"2026-11-05T17:36:19.696Z","data":{"name":"Nour Kidoudi","email":"contact@nourkidoudi.dev","message":"Message de contact envoye via Express et notifie dans SQS Floci !"}}
+```
+
+![Communication API Express vers SQS Floci avec réception de message](screenshots/114-floci-express-sqs.png)
+
+### 115 - Intégration de Floci dans Docker Compose
+
+Le service `floci` est intégré dans `docker-compose.yml` aux côtés de l'API, du frontend et de PostgreSQL :
+
+```yaml
+  floci:
+    image: floci/floci
+    container_name: floci
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,sqs,dynamodb,lambda,secretsmanager
+      - DEFAULT_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - portfolio-net
+```
+
+![Service Floci démarré dans Docker Compose](screenshots/115-floci-docker-compose.png)
+
+### 116 - Service container Floci dans GitHub Actions
+
+Le workflow CI `.github/workflows/ci.yml` exécute les tests d'intégration cloud en démarrant Floci en tant que **service container** natif GitHub Actions, sans nécessiter de compte AWS ni de facturation cloud :
+
+```yaml
+  integration-aws:
+    name: Tests integration AWS (Floci)
+    runs-on: ubuntu-latest
+    services:
+      floci:
+        image: floci/floci
+        ports:
+          - 4566:4566
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configuration AWS CLI (profil floci)
+        run: |
+          aws configure set aws_access_key_id test --profile floci
+          aws configure set aws_secret_access_key test --profile floci
+          aws configure set region us-east-1 --profile floci
+      - name: Creation bucket S3 et file SQS de test
+        run: |
+          aws --profile floci --endpoint-url http://localhost:4566 s3 mb s3://portfolio-bucket
+          aws --profile floci --endpoint-url http://localhost:4566 sqs create-queue --queue-name portfolio-queue
+      - name: Execution du test d'integration API Express -> Floci SQS
+        run: |
+          npm ci --no-audit --no-fund
+          node ../floci/test-contact-sqs.js
+```
+
+![Job GitHub Actions avec Floci comme service container exécuté avec succès](screenshots/116-floci-github-actions.png)
+
+### 117 - Comparatif : Floci vs LocalStack vs Cloud AWS réel
+
+| Critère | Floci | LocalStack | AWS Cloud Réel |
+|---|---|---|---|
+| **Licence** | 100% Open Source | Open Source (Community) / Freemium (Pro/Enterprise) | Propriétaire (Amazon Web Services) |
+| **Services supportés** | S3, SQS, DynamoDB, Lambda, Secrets Manager, STS, IAM | 35+ services (version Community), 100+ services (version Pro) | Catalogue complet (+200 services managés) |
+| **Fidélité / Émulation** | Haute pour les opérations courantes, légère et rapide | Très élevée (mocks avancés, gestion des erreurs AWS réelles) | **100% (Environnement de référence)** |
+| **Coût** | **Gratuit (0 $)** | Gratuit en Community, abonnement payant pour Pro/Team | **Pay-as-you-go** (facturation à la consommation) |
+| **Usage en CI** | Idéal : démarrage ultra-rapide (< 2s), image légère (~370 Mo) | Excellent en Community/Pro, image plus volumineuse (~1.6 Go) | Nécessite credentials IAM, infra temporaire, risques de coûts oubliés |
+| **Isolation & Sécurité** | 100% local, aucune donnée ne sort de la machine | Local ou CI isolée, aucune fuite externe de données | Environnement partagé cloud, nécessite VPC, IAM strict et chiffrement |
+
+---
+
 **Dépôt :** https://github.com/nourkidoudi/tp-devops

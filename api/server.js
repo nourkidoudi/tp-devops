@@ -15,6 +15,16 @@ const { stages } = require("./data/stages");
 const { tools } = require("./data/tools");
 const { experience } = require("./data/experience");
 
+// Tâche 114 : intégration SQS locale (LocalStack / Floci) – facultatif si SQS_QUEUE_URL non défini
+let notifyContactViaSQS = null;
+if (process.env.SQS_QUEUE_URL) {
+  try {
+    ({ notifyContactViaSQS } = require("./sqs"));
+  } catch {
+    console.warn("[SQS] Module d'intégration non disponible, notifications désactivées.");
+  }
+}
+
 const app = express(); // nosemgrep: javascript.express.security.audit.express-check-csurf-middleware-usage.express-check-csurf-middleware-usage
 const PORT = process.env.PORT || 3001;
 const CORS_ORIGIN = (process.env.CORS_ORIGIN || "http://localhost:3000").split(",");
@@ -119,6 +129,13 @@ app.post("/api/contact", contactLimiter, async (req, res) => {
   }
 
   const saved = await prisma.contactMessage.create({ data: result.data });
+
+  // Tâche 114 : notification SQS si LocalStack disponible
+  if (notifyContactViaSQS) {
+    notifyContactViaSQS(result.data).catch((err) =>
+      console.warn("[SQS] Notification échouée :", err.message)
+    );
+  }
 
   res.status(201).json({ success: true, message: "Message reçu, merci !", id: saved.id });
 });

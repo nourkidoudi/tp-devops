@@ -1,6 +1,29 @@
 # Portfolio DevSecOps : frontend Next.js + API Express + PostgreSQL
+# Inclut Floci pour l'émulation AWS locale (tâche 115)
 
 services:
+  # ── Tâche 115 : Floci (Émulateur AWS local) ─────────────────────────────────
+  floci:
+    image: floci/floci
+    container_name: floci
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,sqs,dynamodb,lambda,secretsmanager
+      - DEFAULT_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - portfolio-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4566/_floci/health || curl -f http://localhost:4566/_localstack/health || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   db:
     image: postgres:17-alpine
     container_name: devsecops-db
@@ -29,6 +52,11 @@ services:
     environment:
       PORT: "3001"
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      SQS_ENDPOINT: http://floci:4566
+      SQS_QUEUE_URL: http://floci:4566/000000000000/portfolio-queue
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
     ports:
       - "3001:3001"
     depends_on:
@@ -56,6 +84,7 @@ services:
 
 volumes:
   pgdata:
+  floci-data:
 
 networks:
   portfolio-net:
