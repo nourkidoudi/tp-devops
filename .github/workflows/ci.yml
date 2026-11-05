@@ -156,6 +156,7 @@ jobs:
       - name: Execution du test d'integration API Express -> Floci SQS
         working-directory: api
         env:
+          NODE_PATH: node_modules
           SQS_ENDPOINT: http://localhost:4566
           SQS_QUEUE_URL: http://localhost:4566/000000000000/portfolio-queue
           AWS_REGION: us-east-1
