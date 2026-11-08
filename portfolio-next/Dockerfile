@@ -1,7 +1,7 @@
 # Dockerfile du frontend Next.js (build en plusieurs étapes)
 
 # Étape 1 : installation des dépendances
-FROM node:22-alpine AS deps
+FROM node:25-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm config set fetch-retries 5 \
@@ -10,7 +10,7 @@ RUN npm config set fetch-retries 5 \
     && npm config set fetch-timeout 300000 \
     && npm ci --no-audit --no-fund
 # Étape 2 : construction de l'application
-FROM node:22-alpine AS builder
+FROM node:25-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
@@ -18,7 +18,7 @@ COPY . .
 RUN npm run build
 
 # Étape 3 : image finale, légère, qui exécute l'application
-FROM node:22-alpine AS runner
+FROM node:25-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
