@@ -1,5 +1,5 @@
 # Étape 1 : Builder
-FROM node:22-alpine AS builder
+FROM node:25-alpine AS builder
 WORKDIR /app
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json ./
@@ -8,7 +8,7 @@ RUN npm ci
 RUN npx prisma generate
 
 # Étape 2 : Runner (Image finale ultra-légère)
-FROM node:22-alpine AS runner
+FROM node:25-alpine AS runner
 WORKDIR /app
 RUN apk add --no-cache openssl
 ENV NODE_ENV=production \
