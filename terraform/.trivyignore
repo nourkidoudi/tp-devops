@@ -1,0 +1,3 @@
+# Floci (emulateur local) n'expose pas KMS : le chiffrement AES256 gere par AWS
+# est conserve. En production reelle, utiliser une cle KMS geree par le client.
+AVD-AWS-0132
