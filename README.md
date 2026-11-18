@@ -2418,3 +2418,18 @@ Destroy complete! Resources: 3 destroyed.
 ---
 
 **Dépôt :** https://github.com/nourkidoudi/tp-devops
+
+## Partie 24 : Terraform avancé
+
+### Rôle du fichier Terraform State (tâche 126)
+
+Le fichier `terraform.tfstate` est la mémoire de Terraform : il associe chaque
+ressource décrite dans le code (`aws_s3_bucket.portfolio_bucket`) à la ressource
+réelle créée (identifiant, attributs). Grâce à lui, Terraform calcule la différence
+entre le code et l'existant lors d'un `plan`, et sait quoi créer, modifier ou détruire.
+
+Il peut contenir des valeurs sensibles : il ne doit jamais être commité sur Git.
+Ici il est stocké dans un backend distant (bucket S3 `tf-state-bucket` dans Floci),
+ce qui permet de le partager et de le sauvegarder. Une table DynamoDB
+(`tf-state-locks`) pose un verrou pendant les opérations, pour empêcher deux
+exécutions simultanées de corrompre le state.
