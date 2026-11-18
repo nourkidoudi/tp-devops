@@ -2433,3 +2433,69 @@ Ici il est stocké dans un backend distant (bucket S3 `tf-state-bucket` dans Flo
 ce qui permet de le partager et de le sauvegarder. Une table DynamoDB
 (`tf-state-locks`) pose un verrou pendant les opérations, pour empêcher deux
 exécutions simultanées de corrompre le state.
+
+## 24. Terraform avancé
+
+Cette partie fait évoluer le projet Terraform de la partie 23 vers une organisation professionnelle : modules réutilisables, environnements séparés, state distant et verrouillé, toujours sur l'émulateur Floci (`http://localhost:4566`).
+
+### 124 - Modules réutilisables
+
+La configuration commune (bucket S3 chiffré, file SQS, table DynamoDB) est extraite dans un module `terraform/modules/portfolio-infra/` qui contient `main.tf`, `variables.tf` et `outputs.tf`. Le module est paramétrable par `environment`, `sqs_retention_seconds` et `enable_pitr`.
+
+![Structure des modules](screenshots/124-module-structure.png)
+
+### 125 - Environnements dev, staging et prod
+
+Chaque environnement dans `terraform/environments/<env>/` appelle le même module avec ses propres valeurs :
+
+| Paramètre | dev | prod |
+|---|---|---|
+| Rétention SQS | 86400 s (1 jour) | 1209600 s (14 jours) |
+| PITR DynamoDB | désactivé | activé |
+
+```hcl
+module "portfolio" {
+  source = "../../modules/portfolio-infra"
+
+  environment           = "dev"
+  sqs_retention_seconds = 86400
+  enable_pitr           = false
+}
+```
+
+![Plan de l'environnement dev](screenshots/125-environments-plan.png)
+
+### 126 - Rôle du fichier Terraform State
+
+Le fichier `terraform.tfstate` est la mémoire de Terraform : il associe chaque ressource décrite dans le code (`aws_s3_bucket.portfolio_bucket`) à la ressource réelle créée (identifiant, attributs). Grâce à lui, Terraform calcule la différence entre le code et l'existant lors d'un `plan`, et sait quoi créer, modifier ou détruire.
+
+Il peut contenir des valeurs sensibles : il ne doit jamais être commité sur Git. Il est donc exclu par le `.gitignore` et stocké dans un backend distant.
+
+### 127 - Backend distant S3 dans Floci
+
+Le state est stocké dans le bucket `tf-state-bucket` hébergé par Floci, avec une clé par environnement (`environments/dev/terraform.tfstate`). Le bucket et la table de verrou sont créés au préalable par `scripts/bootstrap-backend.sh`.
+
+```hcl
+backend "s3" {
+  bucket         = "tf-state-bucket"
+  key            = "environments/dev/terraform.tfstate"
+  region         = "us-east-1"
+  dynamodb_table = "tf-state-locks"
+
+  endpoints = {
+    s3       = "http://localhost:4566"
+    dynamodb = "http://localhost:4566"
+  }
+  # ... identifiants factices pour Floci
+}
+```
+
+Le state est bien présent dans le bucket, et aucun fichier local n'est créé :
+
+![State distant dans S3](screenshots/127-remote-state.png)
+
+### 128 - Verrouillage du state
+
+La table DynamoDB `tf-state-locks` (clé `LockID`) pose un verrou pendant chaque opération. Une deuxième exécution lancée alors que la première est en attente de confirmation est refusée avec `Error acquiring the state lock` :
+
+![Verrou du state Terraform](screenshots/128-terraform-lock.png)
