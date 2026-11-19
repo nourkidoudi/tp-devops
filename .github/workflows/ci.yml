@@ -166,3 +166,24 @@ jobs:
           npm ci --no-audit --no-fund
           node ../floci/test-contact-sqs.js
 
+
+  # ---------------------------------------------------------------------------
+  # Taches 129 et 130 : scan de securite IaC avec Trivy
+  # Le pipeline echoue si une misconfiguration HIGH/CRITICAL est detectee
+  # ---------------------------------------------------------------------------
+  iac-security:
+    name: Scan securite IaC (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Recuperation du depot
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Scan IaC avec Trivy
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'config'
+          scan-ref: './terraform'
+          exit-code: '1'
+          severity: 'HIGH,CRITICAL'
+          trivyignores: 'terraform/.trivyignore'
+          skip-dirs: '**/.terraform'
