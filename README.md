@@ -2675,3 +2675,88 @@ Les 3 environnements sont factorisés : un seul `terragrunt.hcl` racine, trois f
 - Un warning non bloquant apparaît : `Using terragrunt.hcl as the root ... anti-pattern`. Les futures versions de Terragrunt exigeront `root.hcl` comme nom de fichier racine. On le garde ici pour rester compatible avec la version installée.
 - Les `.terraform.lock.hcl` générés par OpenTofu dans `terraform/terragrunt/` sont git-ignorés (comme celui de la tâche 131), pour ne pas perturber le CI Terraform sur `main`.
 - Le `.terragrunt-cache/` est également git-ignoré.
+
+### 133 - Pulumi : recréer une ressource dans Floci
+
+Pulumi est un outil IaC qui utilise des **langages de programmation** (Python, TypeScript, Go, etc.) au lieu d'un DSL comme HCL. Il utilise le même modèle que Terraform (state, providers, plan/apply) mais le code est du Python/TS classique.
+
+Pour la démo, on recrée une petite ressource dans Floci : un bucket S3, avec le provider AWS Pulumi configuré pour pointer sur `http://localhost:4566`.
+
+### Structure du projet
+```
+terraform/pulumi/
+├── Pulumi.yaml # runtime python, virtualenv venv
+├── requirements.txt # pulumi, pulumi-aws
+└── main.py # code Pulumi (provider Floci + bucket S3)
+```
+
+
+
+Le provider AWS est instancié explicitement pour cibler Floci :
+
+```python
+floci = aws.Provider(
+    "floci",
+    region="us-east-1",
+    access_key="test",
+    secret_key="test",
+    skip_credentials_validation=True,
+    skip_metadata_api_check=True,
+    skip_region_validation=True,
+    skip_requesting_account_id=True,
+    s3_use_path_style=True,
+    endpoints=[aws.ProviderEndpointArgs(
+        s3="http://localhost:4566",
+        sqs="http://localhost:4566",
+        dynamodb="http://localhost:4566",
+    )],
+)
+
+bucket = aws.s3.Bucket(
+    "portfolio-pulumi-bucket",
+    bucket="tf-portfolio-pulumi-demo",
+    force_destroy=True,
+    opts=pulumi.ResourceOptions(provider=floci),
+)
+```
+
+### Commandes et résultat
+
+```bash
+cd terraform/pulumi
+pulumi install
+pulumi stack init dev
+pulumi up --yes
+aws --profile floci --endpoint-url http://localhost:4566 s3 ls | grep pulumi
+pulumi destroy --yes
+```
+
+Résultat de pulumi up :
+
++   pulumi:pulumi:Stack      portfolio-pulumi-dev     created
++   ├─ pulumi:providers:aws  floci                    created
++   └─ aws:s3:Bucket         portfolio-pulumi-bucket  created
+Resources: + 3 created
+Vérification AWS CLI : le bucket tf-portfolio-pulumi-demo apparaît dans aws s3 ls. Après pulumi destroy, il disparaît.
+
+### Comparaison Terraform / OpenTofu / Pulumi
+
+| Critère | Terraform | OpenTofu | Pulumi |
+|---|---|---|---|
+| Langage | HCL (DSL) | HCL (identique) | Python, TypeScript, Go, etc. |
+| Licence | BUSL 1.1 | MPL 2.0 | Apache 2.0 |
+| State | backend S3 + lock DynamoDB | idem (compatible) | backend local, S3, cloud… |
+| Providers | registry.terraform.io | registry.opentofu.org (miroir) | providers Pulumi (bridge vers Terraform) |
+| Modèle | déclaratif HCL | déclaratif HCL | impératif + déclaratif (vrai code) |
+| Cible Floci | oui (endpoints) | oui (endpoints) | oui (provider AWS + endpoints) |
+| Courbe d'apprentissage | moyenne (HCL) | moyenne (HCL) | dépend du langage (Python/TS) |
+| Écosystème | très large | large (fork) | large (providers Terraform réutilisés) |
+
+**En résumé :**
+
+- **Terraform** reste la référence, mais sa licence BUSL restreint l'usage commercial.
+- **OpenTofu** est un drop-in replacement open source (MPL 2.0), compatible state et providers.
+- **Pulumi** permet d'écrire l'IaC dans un langage de programmation classique, ce qui est puissant pour des logiques complexes (boucles, conditions, tests unitaires), au prix d'une courbe d'apprentissage différente et d'un state géré par Pulumi.
+
+Les trois outils fonctionnent avec Floci : Terraform et OpenTofu via `endpoints` dans le provider AWS, Pulumi via `aws.Provider(endpoints=[...])`. La démo Pulumi crée un bucket S3 dans Floci, vérifié avec `aws s3 ls`, puis détruit avec `pulumi destroy`.
+
