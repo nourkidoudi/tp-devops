@@ -179,11 +179,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Scan IaC avec Trivy
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: 'config'
-          scan-ref: './terraform'
-          exit-code: '1'
-          severity: 'HIGH,CRITICAL'
-          trivyignores: 'terraform/.trivyignore'
-          skip-dirs: '**/.terraform'
+        run: |
+          docker run --rm -v "$PWD/terraform:/src" aquasec/trivy:0.57.1 \
+            config /src --severity HIGH,CRITICAL --skip-dirs "**/.terraform" \
+            --ignorefile /src/.trivyignore --exit-code 1
