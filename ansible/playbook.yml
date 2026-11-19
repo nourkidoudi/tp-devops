@@ -1,0 +1,37 @@
+---
+- name: Configuration du serveur cible (Docker deja installe)
+  hosts: targets
+  become: false
+  gather_facts: true
+
+  tasks:
+    - name: Verifier la version de Docker
+      command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: Afficher la version de Docker
+      debug:
+        msg: "{{ docker_version.stdout }}"
+
+    - name: Verifier que le demon Docker tourne
+      command: docker info
+      register: docker_info
+      changed_when: false
+
+    - name: Afficher un extrait de docker info
+      debug:
+        msg: "Docker daemon OK ({{ docker_info.stdout_lines | length }} lignes)"
+
+    - name: Lancer un conteneur hello-world (preuve que Docker fonctionne)
+      command: docker run --rm hello-world
+      register: hello
+      changed_when: false
+
+    - name: Afficher la sortie de hello-world
+      debug:
+        msg: "{{ hello.stdout_lines }}"
+
+    - name: Rappeler le bucket cree par Terraform
+      debug:
+        msg: "Bucket Floci cree par Terraform : {{ demo_bucket }}"

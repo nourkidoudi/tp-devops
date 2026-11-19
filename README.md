@@ -2760,3 +2760,66 @@ Vérification AWS CLI : le bucket tf-portfolio-pulumi-demo apparaît dans aws s3
 
 Les trois outils fonctionnent avec Floci : Terraform et OpenTofu via `endpoints` dans le provider AWS, Pulumi via `aws.Provider(endpoints=[...])`. La démo Pulumi crée un bucket S3 dans Floci, vérifié avec `aws s3 ls`, puis détruit avec `pulumi destroy`.
 
+
+
+### 134 - Terraform + Ansible : infra puis configuration serveur
+
+Objectif : **Terraform crée l'infrastructure**, puis **Ansible configure le serveur** (Docker). Le pont entre les deux est un **inventaire Ansible généré par Terraform**.
+
+Schéma du flux :
+┌─────────────┐ terraform apply ┌──────────────────────┐
+│ Terraform │ ───────────────────────► │ Floci (S3 bucket) │
+│ main.tf │ │ tf-ansible-demo-... │
+└──────┬──────┘ └──────────────────────┘
+│
+│ local_file (generate)
+▼
+┌──────────────────────┐ ansible-playbook ┌──────────────────┐
+│ ansible/ │ ───────────────────► │ Serveur cible │
+│ inventory.ini │ │ (localhost) │
+│ playbook.yml │ │ → Docker │
+└──────────────────────┘ └──────────────────┘
+
+### Fichiers
+terraform/ansible-demo/
+├── main.tf # bucket S3 Floci + generation de l'inventaire Ansible
+└── outputs.tf # target_bucket, inventory_path
+
+ansible/
+├── ansible.cfg # inventaire = inventory.ini
+└── playbook.yml # verifie Docker, lance hello-world, rappelle le bucket
+
+scripts/
+└── run-134.sh # orchestration : terraform apply puis ansible-playbook
+
+
+Le `local_file` de Terraform écrit `ansible/inventory.ini` avec le nom du bucket cree :
+
+```hcl
+resource "local_file" "ansible_inventory" {
+  filename = "${path.module}/../../ansible/inventory.ini"
+  content  = <<-INV
+    [targets]
+    localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
+
+    [targets:vars]
+    demo_bucket=${aws_s3_bucket.ansible_target.bucket}
+  INV
+}
+```
+
+Exécution
+bash scripts/run-134.sh
+Résultat :
+
+terraform apply : Apply complete! Resources: 2 added (aws_s3_bucket.ansible_target + local_file.ansible_inventory).
+
+ansible-playbook : PLAY RECAP avec ok=8 changed=0 failed=0.
+
+docker run --rm hello-world : le message « Hello from Docker! » s'affiche, preuve que Docker fonctionne sur le serveur configure.
+
+L'inventaire genere par Terraform est bien lu par Ansible (demo_bucket=tf-ansible-demo-target).
+
+![Terraform + Ansible : infra puis configuration Docker](screenshots/134-terraform-ansible.png)
+
+
