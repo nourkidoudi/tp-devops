@@ -22,3 +22,7 @@ terraform.rc
 *.tfstate.*
 *.tfvars
 crash.log
+.terragrunt-cache/
+
+# Locks générés par OpenTofu via Terragrunt (ne pas commiter)
+terraform/terragrunt/**/.terraform.lock.hcl

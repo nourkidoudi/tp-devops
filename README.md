@@ -2605,3 +2605,73 @@ Le plan produit est identique à celui de Terraform (Plan: 5 to add) : mêmes re
 | Binaire | `terraform` | `tofu` |
 | CLI | identique | identique (drop-in) |
 
+
+### 132 - Terragrunt pour factoriser dev / staging / prod
+
+Terragrunt est un wrapper autour de Terraform/OpenTofu qui permet d'éviter la duplication de configuration entre environnements : backend distant, provider, valeurs communes sont définis une seule fois dans un `terragrunt.hcl` racine, et chaque environnement hérite via `include "root"`.
+
+
+### Structure
+
+```
+terraform/terragrunt/
+├── terragrunt.hcl          # racine : remote_state + generate provider/backend
+├── dev/terragrunt.hcl      # rétention SQS 1j, PITR off
+├── staging/terragrunt.hcl  # rétention SQS 4j, PITR on
+└── prod/terragrunt.hcl     # rétention SQS 14j, PITR on
+```
+
+Le `terragrunt.hcl` racine factorise :
+
+- le **backend S3** (`tf-state-bucket` dans Floci, clé `terragrunt/<env>/terraform.tfstate`, lock DynamoDB `tf-state-locks`),
+- le **provider AWS** pointant sur Floci (`http://localhost:4566`),
+- un **bloc backend vide** injecté dans le module via `generate "backend"` (nécessaire pour que Terragrunt applique `remote_state`).
+
+
+### Piège rencontré et solution
+
+Premier `terragrunt init` échoue avec :
+
+```
+ERROR Found remote_state settings in .../terragrunt.hcl but no backend block
+in the OpenTofu/Terraform code ... You must define a backend block
+```
+
+Le module `portfolio-infra` ne contient pas de bloc `backend` (c'est normal, il est réutilisable). Solution : ajouter dans le `terragrunt.hcl` racine un bloc `generate "backend"` qui écrit un `backend.tf` contenant `terraform { backend "s3" {} }` dans le module téléchargé :
+
+```hcl
+generate "backend" {
+  path      = "backend.tf"
+  if_exists = "overwrite_terragrunt"
+  contents  = <<BACKEND
+terraform {
+  backend "s3" {}
+}
+BACKEND
+}
+```
+
+
+### Résultat
+
+`terragrunt init` puis `terragrunt plan` sur `dev` produisent le même plan que `terraform plan` / `tofu plan` sur `terraform/environments/dev` :
+
+```
+Plan: 5 to add, 0 to change, 0 to destroy.
+```
+
+Les 3 environnements sont factorisés : un seul `terragrunt.hcl` racine, trois fichiers de 10 lignes qui ne diffèrent que par les `inputs`. Les valeurs des environnements sont cohérentes avec la partie 24 :
+
+| Environnement | Rétention SQS | PITR DynamoDB |
+|---|---|---|
+| dev | 86400 s (1j) | désactivé |
+| staging | 345600 s (4j) | activé |
+| prod | 1209600 s (14j) | activé |
+
+
+### Points d'attention
+
+- Terragrunt a détecté **OpenTofu** (`tofu`) dans le `PATH` et l'a utilisé automatiquement à la place de Terraform. Il peut aussi utiliser Terraform via `TG_TF_PATH=/usr/local/bin/terraform`.
+- Un warning non bloquant apparaît : `Using terragrunt.hcl as the root ... anti-pattern`. Les futures versions de Terragrunt exigeront `root.hcl` comme nom de fichier racine. On le garde ici pour rester compatible avec la version installée.
+- Les `.terraform.lock.hcl` générés par OpenTofu dans `terraform/terragrunt/` sont git-ignorés (comme celui de la tâche 131), pour ne pas perturber le CI Terraform sur `main`.
+- Le `.terragrunt-cache/` est également git-ignoré.
