@@ -2499,3 +2499,56 @@ Le state est bien présent dans le bucket, et aucun fichier local n'est créé :
 La table DynamoDB `tf-state-locks` (clé `LockID`) pose un verrou pendant chaque opération. Une deuxième exécution lancée alors que la première est en attente de confirmation est refusée avec `Error acquiring the state lock` :
 
 ![Verrou du state Terraform](screenshots/128-terraform-lock.png)
+
+### 129 - Analyse IaC (Trivy) dans le pipeline
+
+Le workflow CI exécute un job `iac-security` ("Scan securite IaC (Trivy)") qui analyse tout le dossier `terraform/` avec Trivy en mode `config` :
+
+```yaml
+- name: Scan IaC avec Trivy
+  run: |
+    docker run --rm -v "$PWD/terraform:/src" aquasec/trivy:0.57.1 \
+      config /src --severity HIGH,CRITICAL --skip-dirs "**/.terraform" \
+      --ignorefile /src/.trivyignore --exit-code 1
+
+
+
+
+
+Points clés :
+
+- L'image `aquasec/trivy:0.57.1` est épinglée (le tag `trivy-action@0.28.0` ne se résolvait pas sur GitHub, d'où l'appel direct à l'image Docker).
+- `--exit-code 1` fait échouer le job dès qu'une mauvaise configuration `HIGH` ou `CRITICAL` est trouvée.
+- `--skip-dirs "**/.terraform"` ignore le cache des providers.
+- Le fichier `terraform/.trivyignore` ignore la règle `AVD-AWS-0132` (chiffrement KMS), car Floci n'implémente pas KMS.
+
+Le scan a d'abord remonté des problèmes dans le module et le `terraform/main.tf` racine (bucket S3 sans public access block, file SQS non chiffrée). Ils ont été corrigés :
+
+- `aws_s3_bucket_public_access_block` ajouté sur le bucket,
+- `kms_master_key_id = "alias/aws/sqs"` (SSE) ajouté sur la file SQS.
+
+Le job est vert sur `main` après ces corrections.
+```
+
+### 130 - Détection d'une mauvaise configuration volontaire
+
+Pour vérifier que le pipeline détecte bien une régression, une branche `test/iac-misconfig` a introduit volontairement un fichier `terraform/test-insecure/main.tf` non conforme :
+
+- un bucket S3 **public** (`acl = "public-read"`) et **non chiffré**,
+- une file SQS **non chiffrée**.
+
+Une pull request a été ouverte depuis cette branche vers `main` (PR #22). Le job `Scan securite IaC (Trivy)` est passé au **rouge** avec `exit code 1` et **7 findings HIGH** sur `test-insecure/main.tf` :
+
+| Règle | Description |
+|---|---|
+| AVD-AWS-0086 | Pas de public access block (public ACLs) |
+| AVD-AWS-0087 | Pas de public access block (public policies) |
+| AVD-AWS-0088 | Bucket S3 non chiffré |
+| AVD-AWS-0091 | Pas de public access block (ignore public ACLs) |
+| AVD-AWS-0092 | ACL publique `public-read` sur le bucket |
+| AVD-AWS-0093 | Pas de public access block (restrict public buckets) |
+| AVD-AWS-0096 | File SQS non chiffrée |
+
+![Pipeline échoué sur la mauvaise configuration IaC](screenshots/130-pipeline-iac-failed.png)
+
+La PR a ensuite été **fermée sans être mergée**, et la branche `test/iac-misconfig` supprimée : la mauvaise configuration ne doit jamais atteindre `main`. Le pipeline redevient vert sur `main` une fois la branche supprimée.
