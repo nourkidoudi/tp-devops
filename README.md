@@ -2552,3 +2552,56 @@ Une pull request a été ouverte depuis cette branche vers `main` (PR #22). Le j
 ![Pipeline échoué sur la mauvaise configuration IaC](screenshots/130-pipeline-iac-failed.png)
 
 La PR a ensuite été **fermée sans être mergée**, et la branche `test/iac-misconfig` supprimée : la mauvaise configuration ne doit jamais atteindre `main`. Le pipeline redevient vert sur `main` une fois la branche supprimée.
+
+### 131 - OpenTofu vs Terraform
+
+OpenTofu est un fork open source de Terraform (licence MPL 2.0) créé après le changement de licence de Terraform (BUSL 1.1 en 2023). Il lit le même langage HCL et les mêmes providers, mais utilise son propre registry et son propre binaire.
+
+Installation via le script officiel :
+
+```bash
+curl -fsSL https://get.opentofu.org/install-opentofu.sh -o install-opentofu.sh
+chmod +x install-opentofu.sh
+./install-opentofu.sh --install-method deb
+tofu version
+Terraform	v1.17.2
+OpenTofu	v1.13.9
+
+---
+
+## Bloc 3 — Même infra avec OpenTofu
+
+```bash
+cat >> ~/tp-devops/README.md <<'EOF'
+### Même infrastructure avec OpenTofu
+
+Le même dossier `terraform/environments/dev` est réutilisé sans modification :
+
+```bash
+cd terraform/environments/dev
+tofu init -reconfigure
+tofu plan
+-reconfigure est nécessaire au premier init car OpenTofu détecte que le cache de backend a été créé par Terraform. Il se reconnecte au state S3 existant sans tenter de migration.
+
+Le plan produit est identique à celui de Terraform (Plan: 5 to add) : mêmes ressources, mêmes tags, mêmes outputs. OpenTofu lit donc bien le même HCL, le même module et le même backend que Terraform.
+
+### Différences observées
+
+- **Registry** : lors du `init`, OpenTofu réécrit les entrées du `.terraform.lock.hcl` de `registry.terraform.io/hashicorp/aws` vers `registry.opentofu.org/hashicorp/aws`. La version est conservée (`v5.100.0`), seuls les hashes changent car les binaires ne sont pas identiques octet pour octet. Le lock file a été restauré après la démo pour ne pas casser le CI Terraform.
+- **Licence** : Terraform est sous BUSL 1.1 (restrictions d'usage commercial), OpenTofu sous MPL 2.0 (vraiment open source).
+- **CLI** : commandes identiques (`init`, `plan`, `apply`, `destroy`, `fmt`, `validate`). `tofu` est un drop-in replacement.
+- **State et providers** : OpenTofu lit le state Terraform et utilise les mêmes providers (via son registry miroir).
+- **Fonctionnalités propres à OpenTofu** : chiffrement natif du state (contrairement à Terraform qui nécessite un backend chiffré), `tofu test` intégré, registry open source.
+
+### Comparaison synthétique
+
+| Critère | Terraform | OpenTofu |
+|---|---|---|
+| Licence | BUSL 1.1 | MPL 2.0 |
+| Langage | HCL | HCL (identique) |
+| Providers | registry.terraform.io | registry.opentofu.org (miroir) |
+| State Terraform | oui | oui (compatible) |
+| Chiffrement du state | via backend | natif (`tofu` peut chiffrer) |
+| Binaire | `terraform` | `tofu` |
+| CLI | identique | identique (drop-in) |
+
