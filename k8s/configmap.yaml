@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: devsecops-portfolio
+data:
+  PORT: "3001"
+  SQS_ENDPOINT: "http://192.168.237.130:4566"
+  SQS_QUEUE_URL: "http://192.168.237.130:4566/000000000000/portfolio-queue"
+  AWS_REGION: "us-east-1"
+  NEXT_PUBLIC_API_URL: "http://api-service"

@@ -21,18 +21,11 @@ spec:
         imagePullPolicy: Never
         ports:
         - containerPort: 3001
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secret
         env:
-        - name: PORT
-          value: "3001"
         - name: DATABASE_URL
-          value: "postgresql://dev:dev@192.168.237.130:5433/portfolio?schema=public"
-        - name: SQS_ENDPOINT
-          value: "http://192.168.237.130:4566"
-        - name: SQS_QUEUE_URL
-          value: "http://192.168.237.130:4566/000000000000/portfolio-queue"
-        - name: AWS_REGION
-          value: "us-east-1"
-        - name: AWS_ACCESS_KEY_ID
-          value: "test"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "test"
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@192.168.237.130:5433/$(POSTGRES_DB)?schema=public"
