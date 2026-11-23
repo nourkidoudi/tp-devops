@@ -2857,3 +2857,158 @@ Portfolio accessible depuis la machine physique :
 ![Screenshot](screenshots/151-ingress-portfolio.png)
 
 ![Screenshot](screenshots/152-portfolio-api.png)
+
+## 29. HTTPS et certificats
+
+### 153 - Installation de cert-manager
+
+cert-manager est installé dans le namespace `cert-manager` (via Helm). Ses trois composants (`cert-manager`, `cainjector`, `webhook`) sont en cours d'exécution.
+
+```bash
+helm repo add jetstack https://charts.jetstack.io
+helm repo update
+helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace --set crds.enabled=true
+kubectl get pods -n cert-manager
+```
+
+```text
+NAME                                       READY   STATUS    RESTARTS      AGE
+cert-manager-7dbf96f854-drwkh              1/1     Running   2 (69m ago)   93m
+cert-manager-cainjector-557444dc8d-7597k   1/1     Running   2 (69m ago)   93m
+cert-manager-webhook-bf7f8b575-8zdzx       1/1     Running   3 (68m ago)   93m
+```
+
+![Screenshot](screenshots/153-cert-manager.png)
+
+### 154 - Issuer (CA locale) et certificat TLS
+
+Chaîne de confiance créée dans le namespace `devsecops-portfolio` : un Issuer autosigné génère une CA locale (`portfolio-ca`), puis un Issuer de type CA (`portfolio-ca-issuer`) signe le certificat `portfolio-tls` pour `portfolio.local` (`k8s/tls.yaml`) :
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: selfsigned-issuer
+  namespace: devsecops-portfolio
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: portfolio-ca
+  namespace: devsecops-portfolio
+spec:
+  isCA: true
+  commonName: portfolio-local-ca
+  secretName: portfolio-ca-secret
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: portfolio-ca-issuer
+  namespace: devsecops-portfolio
+spec:
+  ca:
+    secretName: portfolio-ca-secret
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: portfolio-tls
+  namespace: devsecops-portfolio
+spec:
+  secretName: portfolio-tls
+  dnsNames:
+    - portfolio.local
+  issuerRef:
+    name: portfolio-ca-issuer
+    kind: Issuer
+```
+
+```bash
+kubectl apply -f k8s/tls.yaml
+kubectl get issuer,certificate -n devsecops-portfolio
+```
+
+```text
+NAME                                         READY   AGE
+issuer.cert-manager.io/portfolio-ca-issuer   True    14m
+issuer.cert-manager.io/selfsigned-issuer     True    14m
+
+NAME                                        READY   SECRET                AGE
+certificate.cert-manager.io/portfolio-ca    True    portfolio-ca-secret   14m
+certificate.cert-manager.io/portfolio-tls   True    portfolio-tls         14m
+```
+
+![Screenshot](screenshots/154-certificate.png)
+
+### 155 - Ingress en HTTPS : https://portfolio.local
+
+L'Ingress utilise le Secret `portfolio-tls` généré par cert-manager et n'accepte que l'entrée HTTPS de Traefik (`websecure`). Les routes `/` (frontend) et `/api` (API) sont conservées (`k8s/ingress.yaml`) :
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portfolio-ingress
+  namespace: devsecops-portfolio
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - portfolio.local
+      secretName: portfolio-tls
+  rules:
+    - host: portfolio.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-service
+                port:
+                  number: 80
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80
+```
+
+```bash
+kubectl apply -f k8s/ingress.yaml
+kubectl get certificate -n devsecops-portfolio
+```
+
+```text
+NAME            READY   SECRET                AGE
+portfolio-ca    True    portfolio-ca-secret   14m
+portfolio-tls   True    portfolio-tls         14m
+```
+
+Pour que le navigateur de la machine physique fasse confiance au certificat, la CA locale a été exportée puis importée dans les autorités de certification racines de confiance de Windows :
+
+```bash
+kubectl get secret portfolio-ca-secret -n devsecops-portfolio -o jsonpath='{.data.tls\.crt}' | base64 -d > ~/portfolio-ca.crt
+curl -I --resolve portfolio.local:443:127.0.0.1 --cacert ~/portfolio-ca.crt https://portfolio.local
+```
+
+Accès HTTPS au portfolio depuis la machine physique :
+
+![Screenshot](screenshots/155-https-portfolio.png)
+
+![Screenshot](screenshots/155-kubectl-certificate.png)
+
