@@ -2565,3 +2565,38 @@ L'infrastructure a été détruite (`terraform destroy`), puis reconstruite **un
 | `ansible-playbook` | ~25 s |
 | **Total** | **35.96 s** |
 
+
+
+26. Introduction à Kubernetes
+K3s est un cluster Kubernetes léger, déjà installé sur la VM Ubuntu.
+136-137 - Vérification du cluster
+bash
+
+```
+kubectl get nodes
+kubectl get pods -A
+```
+
+Le cluster est opérationnel (`nour Ready control-plane`) et les pods système tournent.
+![Screenshot](screenshots/137-k3s-cluster.png
+138 - Namespace dédié
+bash
+
+```
+kubectl create namespace devsecops-portfolio
+```
+
+139-141 - Deployments et Services
+Le frontend Next.js et l'API Express ont été déployés via des manifests Kubernetes. L'API utilise Prisma pour se connecter à PostgreSQL (qui tourne dans Docker sur la VM, exposé sur le port `5433`).
+Les services `frontend-service` et `api-service` exposent les applications à l'intérieur du cluster :
+bash
+
+```
+kubectl get svc -n devsecops-portfolio
+```
+
+![Screenshot](screenshots/142-k8s-services.png
+143 - Communication Frontend ↔ API
+Le frontend a été configuré avec `NEXT_PUBLIC_API_URL=http://api-service` pour joindre l'API via le nom DNS interne du Service Kubernetes.
+Le test a été réalisé avec un `port-forward` vers le frontend, et le navigateur a affiché les données de l'API :
+![Screenshot](screenshots/143-frontend-api.png
