@@ -2500,366 +2500,68 @@ La table DynamoDB `tf-state-locks` (clé `LockID`) pose un verrou pendant chaque
 
 ![Verrou du state Terraform](screenshots/128-terraform-lock.png)
 
+
 ### 129 - Analyse IaC (Trivy) dans le pipeline
 
-Le workflow CI exécute un job `iac-security` ("Scan securite IaC (Trivy)") qui analyse tout le dossier `terraform/` avec Trivy en mode `config` :
-
-```yaml
-- name: Scan IaC avec Trivy
-  run: |
-    docker run --rm -v "$PWD/terraform:/src" aquasec/trivy:0.57.1 \
-      config /src --severity HIGH,CRITICAL --skip-dirs "**/.terraform" \
-      --ignorefile /src/.trivyignore --exit-code 1
-
-
-
-
-
-Points clés :
-
-- L'image `aquasec/trivy:0.57.1` est épinglée (le tag `trivy-action@0.28.0` ne se résolvait pas sur GitHub, d'où l'appel direct à l'image Docker).
-- `--exit-code 1` fait échouer le job dès qu'une mauvaise configuration `HIGH` ou `CRITICAL` est trouvée.
-- `--skip-dirs "**/.terraform"` ignore le cache des providers.
-- Le fichier `terraform/.trivyignore` ignore la règle `AVD-AWS-0132` (chiffrement KMS), car Floci n'implémente pas KMS.
-
-Le scan a d'abord remonté des problèmes dans le module et le `terraform/main.tf` racine (bucket S3 sans public access block, file SQS non chiffrée). Ils ont été corrigés :
-
-- `aws_s3_bucket_public_access_block` ajouté sur le bucket,
-- `kms_master_key_id = "alias/aws/sqs"` (SSE) ajouté sur la file SQS.
-
-Le job est vert sur `main` après ces corrections.
-```
+Le workflow CI exécute un job `iac-security` qui analyse le dossier `terraform/` avec Trivy en mode `config` (via l'image Docker `aquasec/trivy:0.57.1` avec `--exit-code 1`). Le fichier `terraform/.trivyignore` ignore la règle `AVD-AWS-0132` car Floci n'a pas de KMS. Après avoir corrigé des problèmes initiaux (public access block sur le S3, chiffrement sur la SQS), le job est vert sur `main`.
 
 ### 130 - Détection d'une mauvaise configuration volontaire
 
-Pour vérifier que le pipeline détecte bien une régression, une branche `test/iac-misconfig` a introduit volontairement un fichier `terraform/test-insecure/main.tf` non conforme :
+Pour tester le pipeline, une branche `test/iac-misconfig` a introduit un fichier `terraform/test-insecure/main.tf` non conforme (bucket public `public-read` non chiffré + file SQS non chiffrée).
 
-- un bucket S3 **public** (`acl = "public-read"`) et **non chiffré**,
-- une file SQS **non chiffrée**.
-
-Une pull request a été ouverte depuis cette branche vers `main` (PR #22). Le job `Scan securite IaC (Trivy)` est passé au **rouge** avec `exit code 1` et **7 findings HIGH** sur `test-insecure/main.tf` :
-
-| Règle | Description |
-|---|---|
-| AVD-AWS-0086 | Pas de public access block (public ACLs) |
-| AVD-AWS-0087 | Pas de public access block (public policies) |
-| AVD-AWS-0088 | Bucket S3 non chiffré |
-| AVD-AWS-0091 | Pas de public access block (ignore public ACLs) |
-| AVD-AWS-0092 | ACL publique `public-read` sur le bucket |
-| AVD-AWS-0093 | Pas de public access block (restrict public buckets) |
-| AVD-AWS-0096 | File SQS non chiffrée |
+La PR #22 a fait échouer le job Trivy avec `exit code 1` et 7 findings HIGH (`AVD-AWS-0086`, `0087`, `0088`, `0091`, `0092`, `0093`, `0096`). La PR a été fermée **sans être mergée** et la branche supprimée.
 
 ![Pipeline échoué sur la mauvaise configuration IaC](screenshots/130-pipeline-iac-failed.png)
 
-La PR a ensuite été **fermée sans être mergée**, et la branche `test/iac-misconfig` supprimée : la mauvaise configuration ne doit jamais atteindre `main`. Le pipeline redevient vert sur `main` une fois la branche supprimée.
-
 ### 131 - OpenTofu vs Terraform
 
-OpenTofu est un fork open source de Terraform (licence MPL 2.0) créé après le changement de licence de Terraform (BUSL 1.1 en 2023). Il lit le même langage HCL et les mêmes providers, mais utilise son propre registry et son propre binaire.
+OpenTofu est un fork open source de Terraform (licence MPL 2.0). Il lit le même HCL et les mêmes providers.
 
-Installation via le script officiel :
-
-```bash
-curl -fsSL https://get.opentofu.org/install-opentofu.sh -o install-opentofu.sh
-chmod +x install-opentofu.sh
-./install-opentofu.sh --install-method deb
-tofu version
-Terraform	v1.17.2
-OpenTofu	v1.13.9
-
----
-
-## Bloc 3 — Même infra avec OpenTofu
-
-```bash
-cat >> ~/tp-devops/README.md <<'EOF'
-### Même infrastructure avec OpenTofu
-
-Le même dossier `terraform/environments/dev` est réutilisé sans modification :
-
-```bash
-cd terraform/environments/dev
-tofu init -reconfigure
-tofu plan
--reconfigure est nécessaire au premier init car OpenTofu détecte que le cache de backend a été créé par Terraform. Il se reconnecte au state S3 existant sans tenter de migration.
-
-Le plan produit est identique à celui de Terraform (Plan: 5 to add) : mêmes ressources, mêmes tags, mêmes outputs. OpenTofu lit donc bien le même HCL, le même module et le même backend que Terraform.
-
-### Différences observées
-
-- **Registry** : lors du `init`, OpenTofu réécrit les entrées du `.terraform.lock.hcl` de `registry.terraform.io/hashicorp/aws` vers `registry.opentofu.org/hashicorp/aws`. La version est conservée (`v5.100.0`), seuls les hashes changent car les binaires ne sont pas identiques octet pour octet. Le lock file a été restauré après la démo pour ne pas casser le CI Terraform.
-- **Licence** : Terraform est sous BUSL 1.1 (restrictions d'usage commercial), OpenTofu sous MPL 2.0 (vraiment open source).
-- **CLI** : commandes identiques (`init`, `plan`, `apply`, `destroy`, `fmt`, `validate`). `tofu` est un drop-in replacement.
-- **State et providers** : OpenTofu lit le state Terraform et utilise les mêmes providers (via son registry miroir).
-- **Fonctionnalités propres à OpenTofu** : chiffrement natif du state (contrairement à Terraform qui nécessite un backend chiffré), `tofu test` intégré, registry open source.
-
-### Comparaison synthétique
+- **Test** : `tofu init -reconfigure` puis `tofu plan` sur `terraform/environments/dev` produit exactement le même plan (`Plan: 5 to add`) que Terraform.
+- **Différence observée** : OpenTofu réécrit le `.terraform.lock.hcl` pour pointer vers `registry.opentofu.org` (la version reste `v5.100.0`). Le lock a été restauré après le test pour ne pas casser le CI.
 
 | Critère | Terraform | OpenTofu |
 |---|---|---|
 | Licence | BUSL 1.1 | MPL 2.0 |
-| Langage | HCL | HCL (identique) |
-| Providers | registry.terraform.io | registry.opentofu.org (miroir) |
-| State Terraform | oui | oui (compatible) |
-| Chiffrement du state | via backend | natif (`tofu` peut chiffrer) |
-| Binaire | `terraform` | `tofu` |
 | CLI | identique | identique (drop-in) |
-
+| State Terraform | oui | oui (compatible) |
 
 ### 132 - Terragrunt pour factoriser dev / staging / prod
 
-Terragrunt est un wrapper autour de Terraform/OpenTofu qui permet d'éviter la duplication de configuration entre environnements : backend distant, provider, valeurs communes sont définis une seule fois dans un `terragrunt.hcl` racine, et chaque environnement hérite via `include "root"`.
+Terragrunt factorise la configuration. Un fichier `terragrunt.hcl` racine définit le backend S3 (Floci) et le provider AWS, et les dossiers `dev/`, `staging/`, `prod/` ne contiennent que les `inputs` (rétention SQS, PITR).
 
+**Piège résolu** : Terragrunt exige un bloc `backend` dans le code Terraform. Comme le module n'en a pas, on utilise `generate "backend"` dans la racine pour injecter un `backend.tf` vide. `terragrunt init` et `terragrunt plan` fonctionnent (Terragrunt a d'ailleurs utilisé OpenTofu automatiquement).
 
-### Structure
+### 133 - Pulumi (Python) dans Floci
 
-```
-terraform/terragrunt/
-├── terragrunt.hcl          # racine : remote_state + generate provider/backend
-├── dev/terragrunt.hcl      # rétention SQS 1j, PITR off
-├── staging/terragrunt.hcl  # rétention SQS 4j, PITR on
-└── prod/terragrunt.hcl     # rétention SQS 14j, PITR on
-```
+Pulumi permet d'écrire de l'IaC en Python. Le provider AWS a été configuré avec `endpoints=["http://localhost:4566"]` et `s3_use_path_style=True`.
 
-Le `terragrunt.hcl` racine factorise :
-
-- le **backend S3** (`tf-state-bucket` dans Floci, clé `terragrunt/<env>/terraform.tfstate`, lock DynamoDB `tf-state-locks`),
-- le **provider AWS** pointant sur Floci (`http://localhost:4566`),
-- un **bloc backend vide** injecté dans le module via `generate "backend"` (nécessaire pour que Terragrunt applique `remote_state`).
-
-
-### Piège rencontré et solution
-
-Premier `terragrunt init` échoue avec :
-
-```
-ERROR Found remote_state settings in .../terragrunt.hcl but no backend block
-in the OpenTofu/Terraform code ... You must define a backend block
-```
-
-Le module `portfolio-infra` ne contient pas de bloc `backend` (c'est normal, il est réutilisable). Solution : ajouter dans le `terragrunt.hcl` racine un bloc `generate "backend"` qui écrit un `backend.tf` contenant `terraform { backend "s3" {} }` dans le module téléchargé :
-
-```hcl
-generate "backend" {
-  path      = "backend.tf"
-  if_exists = "overwrite_terragrunt"
-  contents  = <<BACKEND
-terraform {
-  backend "s3" {}
-}
-BACKEND
-}
-```
-
-
-### Résultat
-
-`terragrunt init` puis `terragrunt plan` sur `dev` produisent le même plan que `terraform plan` / `tofu plan` sur `terraform/environments/dev` :
-
-```
-Plan: 5 to add, 0 to change, 0 to destroy.
-```
-
-Les 3 environnements sont factorisés : un seul `terragrunt.hcl` racine, trois fichiers de 10 lignes qui ne diffèrent que par les `inputs`. Les valeurs des environnements sont cohérentes avec la partie 24 :
-
-| Environnement | Rétention SQS | PITR DynamoDB |
-|---|---|---|
-| dev | 86400 s (1j) | désactivé |
-| staging | 345600 s (4j) | activé |
-| prod | 1209600 s (14j) | activé |
-
-
-### Points d'attention
-
-- Terragrunt a détecté **OpenTofu** (`tofu`) dans le `PATH` et l'a utilisé automatiquement à la place de Terraform. Il peut aussi utiliser Terraform via `TG_TF_PATH=/usr/local/bin/terraform`.
-- Un warning non bloquant apparaît : `Using terragrunt.hcl as the root ... anti-pattern`. Les futures versions de Terragrunt exigeront `root.hcl` comme nom de fichier racine. On le garde ici pour rester compatible avec la version installée.
-- Les `.terraform.lock.hcl` générés par OpenTofu dans `terraform/terragrunt/` sont git-ignorés (comme celui de la tâche 131), pour ne pas perturber le CI Terraform sur `main`.
-- Le `.terragrunt-cache/` est également git-ignoré.
-
-### 133 - Pulumi : recréer une ressource dans Floci
-
-Pulumi est un outil IaC qui utilise des **langages de programmation** (Python, TypeScript, Go, etc.) au lieu d'un DSL comme HCL. Il utilise le même modèle que Terraform (state, providers, plan/apply) mais le code est du Python/TS classique.
-
-Pour la démo, on recrée une petite ressource dans Floci : un bucket S3, avec le provider AWS Pulumi configuré pour pointer sur `http://localhost:4566`.
-
-### Structure du projet
-```
-terraform/pulumi/
-├── Pulumi.yaml # runtime python, virtualenv venv
-├── requirements.txt # pulumi, pulumi-aws
-└── main.py # code Pulumi (provider Floci + bucket S3)
-```
-
-
-
-Le provider AWS est instancié explicitement pour cibler Floci :
-
-```python
-floci = aws.Provider(
-    "floci",
-    region="us-east-1",
-    access_key="test",
-    secret_key="test",
-    skip_credentials_validation=True,
-    skip_metadata_api_check=True,
-    skip_region_validation=True,
-    skip_requesting_account_id=True,
-    s3_use_path_style=True,
-    endpoints=[aws.ProviderEndpointArgs(
-        s3="http://localhost:4566",
-        sqs="http://localhost:4566",
-        dynamodb="http://localhost:4566",
-    )],
-)
-
-bucket = aws.s3.Bucket(
-    "portfolio-pulumi-bucket",
-    bucket="tf-portfolio-pulumi-demo",
-    force_destroy=True,
-    opts=pulumi.ResourceOptions(provider=floci),
-)
-```
-
-### Commandes et résultat
-
-```bash
-cd terraform/pulumi
-pulumi install
-pulumi stack init dev
-pulumi up --yes
-aws --profile floci --endpoint-url http://localhost:4566 s3 ls | grep pulumi
-pulumi destroy --yes
-```
-
-Résultat de pulumi up :
-
-+   pulumi:pulumi:Stack      portfolio-pulumi-dev     created
-+   ├─ pulumi:providers:aws  floci                    created
-+   └─ aws:s3:Bucket         portfolio-pulumi-bucket  created
-Resources: + 3 created
-Vérification AWS CLI : le bucket tf-portfolio-pulumi-demo apparaît dans aws s3 ls. Après pulumi destroy, il disparaît.
-
-### Comparaison Terraform / OpenTofu / Pulumi
+- `pulumi up` crée le bucket `tf-portfolio-pulumi-demo` (vérifié avec `aws s3 ls`).
+- `pulumi destroy` le supprime.
 
 | Critère | Terraform | OpenTofu | Pulumi |
 |---|---|---|---|
-| Langage | HCL (DSL) | HCL (identique) | Python, TypeScript, Go, etc. |
+| Langage | HCL | HCL | Python, TS, Go... |
 | Licence | BUSL 1.1 | MPL 2.0 | Apache 2.0 |
-| State | backend S3 + lock DynamoDB | idem (compatible) | backend local, S3, cloud… |
-| Providers | registry.terraform.io | registry.opentofu.org (miroir) | providers Pulumi (bridge vers Terraform) |
-| Modèle | déclaratif HCL | déclaratif HCL | impératif + déclaratif (vrai code) |
-| Cible Floci | oui (endpoints) | oui (endpoints) | oui (provider AWS + endpoints) |
-| Courbe d'apprentissage | moyenne (HCL) | moyenne (HCL) | dépend du langage (Python/TS) |
-| Écosystème | très large | large (fork) | large (providers Terraform réutilisés) |
-
-**En résumé :**
-
-- **Terraform** reste la référence, mais sa licence BUSL restreint l'usage commercial.
-- **OpenTofu** est un drop-in replacement open source (MPL 2.0), compatible state et providers.
-- **Pulumi** permet d'écrire l'IaC dans un langage de programmation classique, ce qui est puissant pour des logiques complexes (boucles, conditions, tests unitaires), au prix d'une courbe d'apprentissage différente et d'un state géré par Pulumi.
-
-Les trois outils fonctionnent avec Floci : Terraform et OpenTofu via `endpoints` dans le provider AWS, Pulumi via `aws.Provider(endpoints=[...])`. La démo Pulumi crée un bucket S3 dans Floci, vérifié avec `aws s3 ls`, puis détruit avec `pulumi destroy`.
-
-
 
 ### 134 - Terraform + Ansible : infra puis configuration serveur
 
-Objectif : **Terraform crée l'infrastructure**, puis **Ansible configure le serveur** (Docker). Le pont entre les deux est un **inventaire Ansible généré par Terraform**.
+Objectif : **Terraform crée l'infra**, puis **Ansible configure le serveur**. Le pont est un inventaire Ansible généré par Terraform (`local_file`).
 
-Schéma du flux :
-┌─────────────┐ terraform apply ┌──────────────────────┐
-│ Terraform │ ───────────────────────► │ Floci (S3 bucket) │
-│ main.tf │ │ tf-ansible-demo-... │
-└──────┬──────┘ └──────────────────────┘
-│
-│ local_file (generate)
-▼
-┌──────────────────────┐ ansible-playbook ┌──────────────────┐
-│ ansible/ │ ───────────────────► │ Serveur cible │
-│ inventory.ini │ │ (localhost) │
-│ playbook.yml │ │ → Docker │
-└──────────────────────┘ └──────────────────┘
-
-### Fichiers
-terraform/ansible-demo/
-├── main.tf # bucket S3 Floci + generation de l'inventaire Ansible
-└── outputs.tf # target_bucket, inventory_path
-
-ansible/
-├── ansible.cfg # inventaire = inventory.ini
-└── playbook.yml # verifie Docker, lance hello-world, rappelle le bucket
-
-scripts/
-└── run-134.sh # orchestration : terraform apply puis ansible-playbook
-
-
-Le `local_file` de Terraform écrit `ansible/inventory.ini` avec le nom du bucket cree :
-
-```hcl
-resource "local_file" "ansible_inventory" {
-  filename = "${path.module}/../../ansible/inventory.ini"
-  content  = <<-INV
-    [targets]
-    localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
-
-    [targets:vars]
-    demo_bucket=${aws_s3_bucket.ansible_target.bucket}
-  INV
-}
-```
-
-Exécution
-bash scripts/run-134.sh
-Résultat :
-
-terraform apply : Apply complete! Resources: 2 added (aws_s3_bucket.ansible_target + local_file.ansible_inventory).
-
-ansible-playbook : PLAY RECAP avec ok=8 changed=0 failed=0.
-
-docker run --rm hello-world : le message « Hello from Docker! » s'affiche, preuve que Docker fonctionne sur le serveur configure.
-
-L'inventaire genere par Terraform est bien lu par Ansible (demo_bucket=tf-ansible-demo-target).
+- **Terraform** crée le bucket `tf-ansible-demo-target` et génère `ansible/inventory.ini`.
+- **Ansible** vérifie Docker et lance `docker run hello-world` sur `localhost`.
 
 ![Terraform + Ansible : infra puis configuration Docker](screenshots/134-terraform-ansible.png)
 
-
-
 ### 135 - Destruction puis reconstruction par les scripts
 
-Objectif : détruire l'infrastructure, puis la **reconstruire uniquement avec les scripts d'automatisation**, en mesurant le temps.
+L'infrastructure a été détruite (`terraform destroy`), puis reconstruite **uniquement avec `scripts/rebuild-135.sh`**.
 
-#### Destruction
+- **Temps total de reconstruction : 35.96 s** (`terraform init/apply` + `ansible-playbook`).
 
-```bash
-# Détruire l'infra de la démo 134
-terraform -chdir=terraform/ansible-demo destroy -auto-approve -input=false
-
-# Vérifier que le bucket a disparu
-aws --profile floci --endpoint-url http://localhost:4566 s3 ls | grep ansible \
-  || echo "Bucket ansible supprime (OK)"
-#### Reconstruction
-
-Le script scripts/rebuild-135.sh enchaîne Terraform (init + apply) puis Ansible (ansible-playbook), et vérifie que le bucket est recréé dans Floci.
-
-time bash scripts/rebuild-135.sh
-#### Résultat
-
-terraform apply : Apply complete! Resources: 2 added (bucket S3 Floci + inventaire Ansible).
-
-ansible-playbook : PLAY RECAP avec ok=8 changed=0 failed=0.
-
-Vérification : tf-ansible-demo-target réapparaît dans aws s3 ls.
-
-Temps total de reconstruction : 35.96 s (Elapsed (wall clock) time: 0:35.96).
-
-
-| Étape | Durée approximative |
+| Étape | Durée |
 |---|---|
 | `terraform init` + `apply` | ~5 s |
 | `ansible-playbook` | ~25 s |
-| Vérification | ~5 s |
 | **Total** | **35.96 s** |
-
-La reconstruction est donc entièrement automatisée par deux scripts (scripts/rebuild-135.sh et scripts/run-134.sh) et ne nécessite aucune action manuelle sur Floci.
-
 
