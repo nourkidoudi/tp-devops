@@ -3012,3 +3012,483 @@ Accès HTTPS au portfolio depuis la machine physique :
 
 ![Screenshot](screenshots/155-kubectl-certificate.png)
 
+
+## 30. Santé et disponibilité de l'application
+
+### 156 - Route de santé `/api/health`
+
+L'API expose la route `/api/health`, qui renvoie son état (`status`, `service`, `uptime`). Elle sert de base aux probes Kubernetes :
+
+```bash
+curl -sk --resolve portfolio.local:443:127.0.0.1 https://portfolio.local/api/health
+```
+
+```json
+{"status":"ok","service":"devsecops-api","uptime":515,"timestamp":"2026-11-23T22:03:14.937Z"}
+```
+
+### 157 et 158 - readinessProbe et livenessProbe de l'API
+
+Le Deployment de l'API contient deux probes sur `/api/health` (port 3001) :
+
+- `readinessProbe` : le Pod ne reçoit du trafic que lorsque l'API répond (la probe retire le Pod du Service tant qu'il n'est pas prêt) ;
+- `livenessProbe` : Kubernetes redémarre le conteneur si l'API ne répond plus.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: api
+  name: api
+  namespace: devsecops-portfolio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - env:
+        - name: DATABASE_URL
+          value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@192.168.237.130:5433/$(POSTGRES_DB)?schema=public
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secret
+        image: devsecops-api:latest
+        imagePullPolicy: Never
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        name: api
+        ports:
+        - containerPort: 3001
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+status: {}
+```
+
+```bash
+kubectl apply -f k8s/api-deployment.yaml
+kubectl describe pod -l app=api -n devsecops-portfolio
+```
+
+Extrait de `kubectl describe pod` (sections `Limits`, `Requests`, `Liveness` et `Readiness`) :
+
+```text
+Containers:
+  api:
+    Container ID:   containerd://5881cca885b4f95a744e8dd972f58cb729252623f61f966326a6afb2958eb5d1
+    Image:          devsecops-api:latest
+    Image ID:       sha256:bf773ad34edccfc453286adcec5fc1be5bb8b3abd942f0325a4a5d534e28af55
+    Port:           3001/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Mon, 23 Nov 2026 21:54:20 +0000
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     300m
+      memory:  256Mi
+    Requests:
+      cpu:      100m
+      memory:   128Mi
+    Liveness:   http-get http://:3001/api/health delay=20s timeout=3s period=20s successThreshold=1 failureThreshold=3
+    Readiness:  http-get http://:3001/api/health delay=10s timeout=3s period=10s successThreshold=1 failureThreshold=3
+    Environment Variables from:
+      app-config  ConfigMap  Optional: false
+      app-secret  Secret     Optional: false
+    Environment:
+      DATABASE_URL:  postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@192.168.237.130:5433/$(POSTGRES_DB)?schema=public
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-v6l68 (ro)
+Conditions:
+```
+
+### 159 - Requests et limits (frontend et API)
+
+Les deux Deployments définissent des ressources minimales garanties (`requests`) et maximales autorisées (`limits`) pour CPU et mémoire. Les `requests` sont aussi la base de calcul de l'autoscaling du CPU.
+
+Deployment du frontend (`k8s/frontend-deployment.yaml`) :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: frontend
+  name: frontend
+  namespace: devsecops-portfolio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "3000"
+        - name: API_URL
+          value: http://api-service
+        envFrom:
+        - configMapRef:
+            name: app-config
+        image: devsecops-portfolio:latest
+        imagePullPolicy: Never
+        name: frontend
+        ports:
+        - containerPort: 3000
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 192Mi
+status: {}
+```
+
+```bash
+kubectl apply -f k8s/frontend-deployment.yaml
+kubectl apply -f k8s/api-deployment.yaml
+kubectl describe pod -l app=frontend -n devsecops-portfolio
+```
+
+```text
+Containers:
+  frontend:
+    Container ID:   containerd://8d26bb59ecf5eaded0962485fdb9e9cf4aedeaefdc34664b0836596f593afe22
+    Image:          devsecops-portfolio:latest
+    Image ID:       sha256:3d994ed91b9697fd0da4752d050ab2e2a80c3fcf38b6915ed36fd1a185dcaa0f
+    Port:           3000/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Mon, 23 Nov 2026 21:54:20 +0000
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     500m
+      memory:  512Mi
+    Requests:
+      cpu:     100m
+      memory:  192Mi
+    Environment Variables from:
+      app-config  ConfigMap  Optional: false
+    Environment:
+      PORT:     3000
+      API_URL:  http://api-service
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-tkh6w (ro)
+Conditions:
+```
+
+### 160 - HorizontalPodAutoscaler pour l'API
+
+Le HPA `api-hpa` ajuste le nombre de Pods de l'API entre 1 et 3, selon l'utilisation moyenne du CPU (cible : 50 % des `requests`). Il s'appuie sur metrics-server, fourni avec K3s (`k8s/hpa.yaml`) :
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-hpa
+  namespace: devsecops-portfolio
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+```
+
+```bash
+kubectl apply -f k8s/hpa.yaml
+kubectl get hpa -n devsecops-portfolio
+```
+
+```text
+NAME      REFERENCE        TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+api-hpa   Deployment/api   cpu: 1%/50%   1         3         1          4m40s
+```
+
+
+## 30. Santé et disponibilité de l'application
+
+### 156 - Route de santé `/api/health`
+
+L'API expose la route `/api/health`, qui renvoie son état (`status`, `service`, `uptime`). Elle sert de base aux probes Kubernetes :
+
+```bash
+curl -sk --resolve portfolio.local:443:127.0.0.1 https://portfolio.local/api/health
+```
+
+```json
+{"status":"ok","service":"devsecops-api","uptime":541,"timestamp":"2026-11-23T22:03:41.346Z"}
+```
+
+### 157 et 158 - readinessProbe et livenessProbe de l'API
+
+Le Deployment de l'API contient deux probes sur `/api/health` (port 3001) :
+
+- `readinessProbe` : le Pod ne reçoit du trafic que lorsque l'API répond (la probe retire le Pod du Service tant qu'il n'est pas prêt) ;
+- `livenessProbe` : Kubernetes redémarre le conteneur si l'API ne répond plus.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: api
+  name: api
+  namespace: devsecops-portfolio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - env:
+        - name: DATABASE_URL
+          value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@192.168.237.130:5433/$(POSTGRES_DB)?schema=public
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: app-secret
+        image: devsecops-api:latest
+        imagePullPolicy: Never
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        name: api
+        ports:
+        - containerPort: 3001
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+status: {}
+```
+
+```bash
+kubectl apply -f k8s/api-deployment.yaml
+kubectl describe pod -l app=api -n devsecops-portfolio
+```
+
+Extrait de `kubectl describe pod` (sections `Limits`, `Requests`, `Liveness` et `Readiness`) :
+
+```text
+Containers:
+  api:
+    Container ID:   containerd://5881cca885b4f95a744e8dd972f58cb729252623f61f966326a6afb2958eb5d1
+    Image:          devsecops-api:latest
+    Image ID:       sha256:bf773ad34edccfc453286adcec5fc1be5bb8b3abd942f0325a4a5d534e28af55
+    Port:           3001/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Mon, 23 Nov 2026 21:54:20 +0000
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     300m
+      memory:  256Mi
+    Requests:
+      cpu:      100m
+      memory:   128Mi
+    Liveness:   http-get http://:3001/api/health delay=20s timeout=3s period=20s successThreshold=1 failureThreshold=3
+    Readiness:  http-get http://:3001/api/health delay=10s timeout=3s period=10s successThreshold=1 failureThreshold=3
+    Environment Variables from:
+      app-config  ConfigMap  Optional: false
+      app-secret  Secret     Optional: false
+    Environment:
+      DATABASE_URL:  postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@192.168.237.130:5433/$(POSTGRES_DB)?schema=public
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-v6l68 (ro)
+Conditions:
+```
+
+![Screenshot](screenshots/158-describe-pod.png)
+
+### 159 - Requests et limits (frontend et API)
+
+Les deux Deployments définissent des ressources minimales garanties (`requests`) et maximales autorisées (`limits`) pour CPU et mémoire. Les `requests` sont aussi la base de calcul de l'autoscaling du CPU.
+
+Deployment du frontend (`k8s/frontend-deployment.yaml`) :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: frontend
+  name: frontend
+  namespace: devsecops-portfolio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - env:
+        - name: PORT
+          value: "3000"
+        - name: API_URL
+          value: http://api-service
+        envFrom:
+        - configMapRef:
+            name: app-config
+        image: devsecops-portfolio:latest
+        imagePullPolicy: Never
+        name: frontend
+        ports:
+        - containerPort: 3000
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 192Mi
+status: {}
+```
+
+```bash
+kubectl apply -f k8s/frontend-deployment.yaml
+kubectl apply -f k8s/api-deployment.yaml
+kubectl describe pod -l app=frontend -n devsecops-portfolio
+```
+
+```text
+Containers:
+  frontend:
+    Container ID:   containerd://8d26bb59ecf5eaded0962485fdb9e9cf4aedeaefdc34664b0836596f593afe22
+    Image:          devsecops-portfolio:latest
+    Image ID:       sha256:3d994ed91b9697fd0da4752d050ab2e2a80c3fcf38b6915ed36fd1a185dcaa0f
+    Port:           3000/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Mon, 23 Nov 2026 21:54:20 +0000
+    Ready:          True
+    Restart Count:  0
+    Limits:
+      cpu:     500m
+      memory:  512Mi
+    Requests:
+      cpu:     100m
+      memory:  192Mi
+    Environment Variables from:
+      app-config  ConfigMap  Optional: false
+    Environment:
+      PORT:     3000
+      API_URL:  http://api-service
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-tkh6w (ro)
+Conditions:
+```
+
+![Screenshot](screenshots/159-resources.png)
+
+### 160 - HorizontalPodAutoscaler pour l'API
+
+Le HPA `api-hpa` ajuste le nombre de Pods de l'API entre 1 et 3, selon l'utilisation moyenne du CPU (cible : 50 % des `requests`). Il s'appuie sur metrics-server, fourni avec K3s (`k8s/hpa.yaml`) :
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-hpa
+  namespace: devsecops-portfolio
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+```
+
+```bash
+kubectl apply -f k8s/hpa.yaml
+kubectl get hpa -n devsecops-portfolio
+```
+
+```text
+NAME      REFERENCE        TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+api-hpa   Deployment/api   cpu: 3%/50%   1         3         1          5m6s
+```
+
+![Screenshot](screenshots/160-hpa.png)
+

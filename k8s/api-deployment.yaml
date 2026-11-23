@@ -1,31 +1,56 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: api
-  namespace: devsecops-portfolio
   labels:
     app: api
+  name: api
+  namespace: devsecops-portfolio
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: api
+  strategy: {}
   template:
     metadata:
       labels:
         app: api
     spec:
       containers:
-      - name: api
-        image: devsecops-api:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 3001
+      - env:
+        - name: DATABASE_URL
+          value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@192.168.237.130:5433/$(POSTGRES_DB)?schema=public
         envFrom:
         - configMapRef:
             name: app-config
         - secretRef:
             name: app-secret
-        env:
-        - name: DATABASE_URL
-          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@192.168.237.130:5433/$(POSTGRES_DB)?schema=public"
+        image: devsecops-api:latest
+        imagePullPolicy: Never
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        name: api
+        ports:
+        - containerPort: 3001
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /api/health
+            port: 3001
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: 300m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+status: {}
