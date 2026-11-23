@@ -1,0 +1,29 @@
+---
+- hosts: all
+  become: true
+  tasks:
+    - name: Installer Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: true
+
+    - name: Démarrer Docker
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Installer K3s
+      shell: curl -sfL https://get.k3s.io | sh -
+      args:
+        creates: /usr/local/bin/k3s
+
+    - name: Vérifier le cluster
+      shell: k3s kubectl get nodes
+      register: k3s_nodes
+      changed_when: false
+
+    - name: Afficher les nœuds
+      debug:
+        msg: "{{ k3s_nodes.stdout_lines }}"

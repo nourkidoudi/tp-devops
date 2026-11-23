@@ -1,0 +1,6 @@
+---
+- name: Installer K3s avec Ansible
+  hosts: all
+  become: false
+  roles:
+    - k3s

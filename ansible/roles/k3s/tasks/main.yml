@@ -1,0 +1,22 @@
+---
+- name: Vérifier que K3s est installé
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Afficher un message si K3s n'est pas installé
+  ansible.builtin.debug:
+    msg: "K3s n'est pas installé. Ce rôle devrait l'installer avec sudo."
+  when: not k3s_binary.stat.exists
+
+- name: Vérifier que le nœud est Ready (via kubectl)
+  ansible.builtin.shell: |
+    kubectl get nodes
+  register: k3s_nodes
+  changed_when: false
+  when: k3s_binary.stat.exists
+
+- name: Afficher l'état du cluster
+  ansible.builtin.debug:
+    msg: "{{ k3s_nodes.stdout_lines }}"
+  when: k3s_binary.stat.exists

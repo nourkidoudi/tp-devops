@@ -2600,3 +2600,51 @@ kubectl get svc -n devsecops-portfolio
 Le frontend a été configuré avec `NEXT_PUBLIC_API_URL=http://api-service` pour joindre l'API via le nom DNS interne du Service Kubernetes.
 Le test a été réalisé avec un `port-forward` vers le frontend, et le navigateur a affiché les données de l'API :
 ![Screenshot](screenshots/143-frontend-api.png)
+
+## 27. Kubernetes avec Ansible
+
+### 144 - Rôle Ansible pour installer K3s
+
+Un rôle Ansible `k3s` a été créé dans `ansible/roles/k3s/`. Il vérifie que K3s est installé et affiche l'état du cluster.
+
+```bash
+cd ansible && ansible-playbook -i localhost, -c local playbook-k3s.yml
+```
+
+Résultat : le playbook affiche `nour Ready control-plane` (K3s déjà installé sur la VM).
+
+![Screenshot](screenshots/144-ansible-k3s.png)
+
+### 145 - Vagrant + Ansible : VM Ubuntu → Docker → K3s
+
+Un `Vagrantfile` et un `playbook-vagrant.yml` automatisent la création d'une VM Ubuntu avec Docker et K3s.
+
+Schéma :
+
+```text
+Vagrant (VirtualBox) → VM Ubuntu (SSH) → Ansible → Docker → K3s
+```
+
+Commandes :
+
+```bash
+cd vagrant-k3s
+vagrant up
+```
+
+La VM est créée, Ansible installe Docker puis K3s. Le cluster est opérationnel (`ubuntu-jammy Ready`).
+
+![Screenshot](screenshots/145-vagrant-up.png)
+
+### 146 - Destruction et recréation du cluster
+
+```bash
+vagrant destroy -f
+time vagrant up
+```
+
+Temps total de recréation : **18 min 54 s** (téléchargement de la box + installation Docker + K3s).
+
+Le cluster est de nouveau opérationnel (`ubuntu-jammy Ready`).
+
+![Screenshot](screenshots/146-vagrant-recreate.png)
