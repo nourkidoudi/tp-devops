@@ -2578,7 +2578,7 @@ kubectl get pods -A
 ```
 
 Le cluster est opérationnel (`nour Ready control-plane`) et les pods système tournent.
-![Screenshot](screenshots/137-k3s-cluster.png
+![Screenshot](screenshots/137-k3s-cluster.png)
 138 - Namespace dédié
 bash
 
@@ -2595,8 +2595,8 @@ bash
 kubectl get svc -n devsecops-portfolio
 ```
 
-![Screenshot](screenshots/142-k8s-services.png
+![Screenshot](screenshots/142-k8s-services.png)
 143 - Communication Frontend ↔ API
 Le frontend a été configuré avec `NEXT_PUBLIC_API_URL=http://api-service` pour joindre l'API via le nom DNS interne du Service Kubernetes.
 Le test a été réalisé avec un `port-forward` vers le frontend, et le navigateur a affiché les données de l'API :
-![Screenshot](screenshots/143-frontend-api.png
+![Screenshot](screenshots/143-frontend-api.png)
