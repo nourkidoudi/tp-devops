@@ -2823,3 +2823,43 @@ L'inventaire genere par Terraform est bien lu par Ansible (demo_bucket=tf-ansibl
 ![Terraform + Ansible : infra puis configuration Docker](screenshots/134-terraform-ansible.png)
 
 
+
+### 135 - Destruction puis reconstruction par les scripts
+
+Objectif : détruire l'infrastructure, puis la **reconstruire uniquement avec les scripts d'automatisation**, en mesurant le temps.
+
+#### Destruction
+
+```bash
+# Détruire l'infra de la démo 134
+terraform -chdir=terraform/ansible-demo destroy -auto-approve -input=false
+
+# Vérifier que le bucket a disparu
+aws --profile floci --endpoint-url http://localhost:4566 s3 ls | grep ansible \
+  || echo "Bucket ansible supprime (OK)"
+#### Reconstruction
+
+Le script scripts/rebuild-135.sh enchaîne Terraform (init + apply) puis Ansible (ansible-playbook), et vérifie que le bucket est recréé dans Floci.
+
+time bash scripts/rebuild-135.sh
+#### Résultat
+
+terraform apply : Apply complete! Resources: 2 added (bucket S3 Floci + inventaire Ansible).
+
+ansible-playbook : PLAY RECAP avec ok=8 changed=0 failed=0.
+
+Vérification : tf-ansible-demo-target réapparaît dans aws s3 ls.
+
+Temps total de reconstruction : 35.96 s (Elapsed (wall clock) time: 0:35.96).
+
+
+| Étape | Durée approximative |
+|---|---|
+| `terraform init` + `apply` | ~5 s |
+| `ansible-playbook` | ~25 s |
+| Vérification | ~5 s |
+| **Total** | **35.96 s** |
+
+La reconstruction est donc entièrement automatisée par deux scripts (scripts/rebuild-135.sh et scripts/run-134.sh) et ne nécessite aucune action manuelle sur Floci.
+
+
