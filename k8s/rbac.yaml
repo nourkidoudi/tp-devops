@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: portfolio-sa
+  namespace: devsecops-portfolio
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: portfolio-role
+  namespace: devsecops-portfolio
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: portfolio-rolebinding
+  namespace: devsecops-portfolio
+subjects:
+  - kind: ServiceAccount
+    name: portfolio-sa
+    namespace: devsecops-portfolio
+roleRef:
+  kind: Role
+  name: portfolio-role
+  apiGroup: rbac.authorization.k8s.io

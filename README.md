@@ -3492,3 +3492,197 @@ api-hpa   Deployment/api   cpu: 3%/50%   1         3         1          5m6s
 
 ![Screenshot](screenshots/160-hpa.png)
 
+
+## 31. Kubernetes Security et RBAC
+
+### 161 à 163 - ServiceAccount, Role et RoleBinding
+
+Un ServiceAccount dédié `portfolio-sa` est créé pour l'application. Le Role `portfolio-role` suit le principe du moindre privilège : lecture seule des ConfigMaps et des Pods du namespace, sans accès aux Secrets ni droit d'écriture. Le RoleBinding associe le Role au ServiceAccount (`k8s/rbac.yaml`) :
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: portfolio-sa
+  namespace: devsecops-portfolio
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: portfolio-role
+  namespace: devsecops-portfolio
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: portfolio-rolebinding
+  namespace: devsecops-portfolio
+subjects:
+  - kind: ServiceAccount
+    name: portfolio-sa
+    namespace: devsecops-portfolio
+roleRef:
+  kind: Role
+  name: portfolio-role
+  apiGroup: rbac.authorization.k8s.io
+```
+
+```bash
+kubectl apply -f k8s/rbac.yaml
+kubectl get sa,role,rolebinding -n devsecops-portfolio
+```
+
+```text
+NAME                          AGE
+serviceaccount/default        4h24m
+serviceaccount/portfolio-sa   10m
+
+NAME                                            CREATED AT
+role.rbac.authorization.k8s.io/portfolio-role   2026-11-23T22:07:50Z
+
+NAME                                                          ROLE                  AGE
+rolebinding.rbac.authorization.k8s.io/portfolio-rolebinding   Role/portfolio-role   10m
+```
+
+![Screenshot](screenshots/163-rbac.png)
+
+### 164 - Tests des permissions avec `kubectl auth can-i`
+
+Les permissions sont testées en se faisant passer pour le ServiceAccount (`--as`). Les actions prévues par le Role doivent renvoyer `yes`, toutes les autres `no` :
+
+```bash
+kubectl auth can-i get configmaps --as=system:serviceaccount:devsecops-portfolio:portfolio-sa -n devsecops-portfolio
+kubectl auth can-i list pods --as=system:serviceaccount:devsecops-portfolio:portfolio-sa -n devsecops-portfolio
+kubectl auth can-i get secrets --as=system:serviceaccount:devsecops-portfolio:portfolio-sa -n devsecops-portfolio
+kubectl auth can-i delete pods --as=system:serviceaccount:devsecops-portfolio:portfolio-sa -n devsecops-portfolio
+kubectl auth can-i create deployments --as=system:serviceaccount:devsecops-portfolio:portfolio-sa -n devsecops-portfolio
+kubectl auth can-i list configmaps --as=system:serviceaccount:devsecops-portfolio:portfolio-sa -n kube-system
+```
+
+Résultats :
+
+```text
+get configmaps         (namespace devsecops-portfolio ) -> yes  (attendu : yes)
+list pods              (namespace devsecops-portfolio ) -> yes  (attendu : yes)
+get secrets            (namespace devsecops-portfolio ) -> no   (attendu : no)
+delete pods            (namespace devsecops-portfolio ) -> no   (attendu : no)
+create deployments     (namespace devsecops-portfolio ) -> no   (attendu : no)
+list configmaps        (namespace kube-system         ) -> no   (attendu : no)
+```
+
+![Screenshot](screenshots/164-can-i.png)
+
+### 165 - Conteneurs sans privilèges élevés (securityContext)
+
+Les Deployments `api` et `frontend` utilisent le ServiceAccount `portfolio-sa` et ne tournent plus avec des privilèges élevés. Paramètres ajoutés au niveau du Pod et de chaque conteneur :
+
+```yaml
+spec:
+  template:
+    spec:
+      serviceAccountName: portfolio-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: api            # idem pour le conteneur frontend
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+```
+
+- `runAsNonRoot` et `runAsUser: 1000` : le processus ne tourne pas en root ;
+- `allowPrivilegeEscalation: false` : le processus ne peut pas obtenir plus de privilèges que son parent ;
+- `capabilities.drop: [ALL]` : toutes les capabilities Linux sont retirées ;
+- `seccompProfile: RuntimeDefault` : filtrage des appels système par défaut du runtime.
+
+Vérification :
+
+```bash
+kubectl get deploy api -n devsecops-portfolio -o jsonpath='{.spec.template.spec.securityContext}{"\n"}{.spec.template.spec.containers[0].securityContext}{"\n"}'
+kubectl exec deploy/api -n devsecops-portfolio -- id
+kubectl exec deploy/frontend -n devsecops-portfolio -- id
+```
+
+```text
+{"runAsGroup":1000,"runAsNonRoot":true,"runAsUser":1000,"seccompProfile":{"type":"RuntimeDefault"}}
+{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}
+uid=1000(node) gid=1000(node) groups=1000(node)
+uid=1000(node) gid=1000(node) groups=1000(node)
+```
+
+![Screenshot](screenshots/165-securitycontext.png)
+
+### 166 - Pod Security Standards (baseline et restricted)
+
+Les Pod Security Standards sont appliqués par des labels sur le namespace (`k8s/namespace.yaml`) :
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devsecops-portfolio
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+```
+
+- `enforce: baseline` : tout Pod qui ne respecte pas le profil baseline (par exemple un conteneur privilégié) est refusé ;
+- `warn: restricted` et `audit: restricted` : le profil restricted, plus strict, ne bloque rien ici mais génère des avertissements et des événements d'audit. PostgreSQL, qui utilise l'image officielle sans les paramètres restricted, est signalé ; les Deployments `api` et `frontend` respectent le profil restricted.
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl get ns devsecops-portfolio --show-labels
+```
+
+```text
+NAME                  STATUS   AGE     LABELS
+devsecops-portfolio   Active   4h24m   kubernetes.io/metadata.name=devsecops-portfolio,pod-security.kubernetes.io/audit-version=latest,pod-security.kubernetes.io/audit=restricted,pod-security.kubernetes.io/enforce-version=latest,pod-security.kubernetes.io/enforce=baseline,pod-security.kubernetes.io/warn-version=latest,pod-security.kubernetes.io/warn=restricted
+```
+
+![Screenshot](screenshots/166-pss-labels.png)
+
+Exemple de Pod refusé par le profil `restricted` : un namespace de test `pss-test` applique ce profil en mode `enforce` (`kubectl label namespace pss-test pod-security.kubernetes.io/enforce=restricted`). Le Pod suivant (`k8s/pod-refuse.yaml`) est privilégié et tourne en root :
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-non-conforme
+  namespace: pss-test
+spec:
+  containers:
+    - name: nginx
+      image: nginx:alpine
+      securityContext:
+        privileged: true
+        runAsUser: 0
+```
+
+```bash
+kubectl apply -f k8s/pod-refuse.yaml
+```
+
+Résultat : le Pod est refusé à la création.
+
+```text
+Error from server (Forbidden): error when creating "/home/nour/tp-devops/k8s/pod-refuse.yaml": pods "pod-non-conforme" is forbidden: violates PodSecurity "restricted:latest": privileged (container "nginx" must not set securityContext.privileged=true), allowPrivilegeEscalation != false (container "nginx" must set securityContext.allowPrivilegeEscalation=false), unrestricted capabilities (container "nginx" must set securityContext.capabilities.drop=["ALL"]), runAsNonRoot != true (pod or container "nginx" must set securityContext.runAsNonRoot=true), runAsUser=0 (container "nginx" must not set runAsUser=0), seccompProfile (pod or container "nginx" must set securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost")
+```
+
+![Screenshot](screenshots/166-pod-refuse.png)
+
